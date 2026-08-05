@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+:root {
+  --brand: #1b2a8f;      /* deep royal blue (logo) */
+  --brand2: #2f6bff;     /* bright accent blue */
+  --ink: #0b1020;
+  --muted: #5b6472;
+  --line: #e6e9f2;
+  --bg: #ffffff;
+  --soft: #f5f7ff;
+}
+* { box-sizing: border-box; }
+html, body { padding: 0; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; border-radius: .75rem; padding: .75rem 1.25rem; font-weight: 700; background: var(--brand); color: #fff; transition: background .15s; }
+.btn:hover { background: #16227a; }
+.btn-accent { background: var(--brand2); }
+.btn-accent:hover { background: #1f57e6; }
+.btn-ghost { background: transparent; color: var(--brand); border: 1px solid var(--line); }
+.btn-ghost:hover { background: var(--soft); }
+.card { background: #fff; border: 1px solid var(--line); border-radius: 1rem; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.input { width: 100%; border: 1px solid var(--line); border-radius: .6rem; padding: .6rem .75rem; font-size: .95rem; background: #fff; color: var(--ink); }
+.input:focus { outline: 2px solid var(--brand2); outline-offset: 0; }
+.label { display: block; font-size: .8rem; font-weight: 600; color: var(--muted); margin-bottom: .3rem; }

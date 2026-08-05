@@ -1,0 +1,102 @@
+// keywordcalls.com — standalone app, isolated DB (SQLite dev / Postgres prod on the Core box).
+// JSON stored as String for sqlite<->postgres parity.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Everyone who logs in: God, Manager, Rep (org tiers), and Customer.
+model Account {
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  passwordHash       String
+  role               String    @default("customer") // god | vp | regional | manager | rep | customer
+  firstName          String    @default("")
+  lastName           String    @default("")
+  phone              String    @default("")
+  city               String    @default("")
+  state              String    @default("")
+  zip                String    @default("")
+  mustChangePassword Boolean   @default(false)
+  active             Boolean   @default(true)
+  parentId           String? // who they report to (org / affiliate tree)
+  refSlug            String    @unique @default("") // firstname-lastname tracking link
+  createdAt          DateTime  @default(now())
+  customer           Customer?
+
+  @@index([role])
+  @@index([parentId])
+}
+
+// Customer campaign configuration (1:1 with a customer Account).
+model Customer {
+  id              String    @id @default(cuid())
+  accountId       String    @unique
+  account         Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  keywords        String    @default("[]") // JSON string[] of keyword ids/names
+  geoType         String    @default("local") // local | statewide | regional | national
+  geoStates       String    @default("[]") // JSON 2-letter codes / regions
+  hours           String    @default("{}") // JSON { days:[], start:"09:00", end:"17:00" }
+  routingNumber   String    @default("") // where their calls go (E.164)
+  planId          String    @default("")
+  balanceCents    Int       @default(0) // pre-funded balance
+  agreementSignedAt DateTime?
+  freeCallUsed    Boolean   @default(false)
+  twilioNumber    String    @default("") // provisioned tracking number (Phase 3)
+  status          String    @default("new") // new | funded | live | paused
+  referredBy      String? // ref account id (affiliate attribution)
+  createdAt       DateTime  @default(now())
+}
+
+// Monthly plans (editable prices).
+model Plan {
+  id          String   @id @default(cuid())
+  name        String
+  scope       String   @default("local") // local | statewide | regional | national
+  priceCents  Int      @default(0)
+  multiAgent  Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  active      Boolean  @default(true)
+
+  @@map("plan")
+}
+
+// Keyword catalog + per-call price (the bid floor). e.g. health insurance $90.
+model Keyword {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  priceCents Int      @default(0) // per-call price
+  active     Boolean  @default(true)
+  sortOrder  Int      @default(0)
+
+  @@map("keyword")
+}
+
+// Footer contact forms: press / investor / partnership / advertise / sponsor.
+model ContactLead {
+  id        String   @id @default(cuid())
+  kind      String   @default("contact") // press | investor | partnership | advertise | sponsor | contact
+  name      String   @default("")
+  phone     String   @default("")
+  email     String   @default("")
+  company   String   @default("")
+  website   String   @default("")
+  reason    String   @default("")
+  createdAt DateTime @default(now())
+
+  @@map("contact_lead")
+}
+
+// God-editable knobs (setup fee, min fund, calendly url, etc.).
+model Setting {
+  key       String   @id
+  value     String   @default("")
+  updatedAt DateTime @updatedAt
+
+  @@map("setting")
+}
