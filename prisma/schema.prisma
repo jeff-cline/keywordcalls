@@ -92,6 +92,37 @@ model ContactLead {
   @@map("contact_lead")
 }
 
+// Every money movement on a customer's pre-funded balance.
+model LedgerEntry {
+  id              String   @id @default(cuid())
+  customerId      String
+  kind            String   @default("fund") // fund | charge | coupon | adjustment | refund
+  amountCents     Int      @default(0) // + credit, - debit
+  balanceAfterCents Int    @default(0)
+  note            String   @default("")
+  stripeRef       String   @default("") // checkout session / payment intent id
+  createdAt       DateTime @default(now())
+
+  @@index([customerId, createdAt])
+  @@map("ledger_entry")
+}
+
+// Coupon codes: a percent discount on a funding amount, OR free funds added to the balance.
+model Coupon {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  kind           String    @default("percent") // percent | add_funds
+  value          Int       @default(0) // percent (0-100) OR cents to add
+  active         Boolean   @default(true)
+  maxRedemptions Int       @default(0) // 0 = unlimited
+  redeemed       Int       @default(0)
+  expiresAt      DateTime?
+  note           String    @default("")
+  createdAt      DateTime  @default(now())
+
+  @@map("coupon")
+}
+
 // God-editable knobs (setup fee, min fund, calendly url, etc.).
 model Setting {
   key       String   @id

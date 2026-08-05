@@ -29,7 +29,10 @@ export default async function Admin() {
       </header>
 
       <main className="mx-auto max-w-5xl px-5 py-8 space-y-6">
-        <h1 className="text-2xl font-bold">Admin 🚀</h1>
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <h1 className="text-2xl font-bold">Admin 🚀</h1>
+          <a href="/admin/settings" className="btn btn-ghost text-sm">⚙️ Integrations & coupons</a>
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-4">
           <div className="card p-5"><div className="text-xs uppercase text-[color:var(--muted)]">Customers</div><div className="text-3xl font-extrabold">{customers}</div></div>

@@ -34,7 +34,7 @@ export default function Footer() {
             <div className="flex flex-col gap-2 text-sm">
               <a href="/signup" className="hover:text-[color:var(--brand2)]">Create an account</a>
               <a href="/login" className="hover:text-[color:var(--brand2)]">Log in</a>
-              <a href="https://calendly.com/jdcline/book-onboarding-call" target="_blank" rel="noreferrer" className="hover:text-[color:var(--brand2)]">Book an onboarding call</a>
+              <a href="/book" className="hover:text-[color:var(--brand2)]">Book an onboarding call</a>
             </div>
           </div>
         </div>

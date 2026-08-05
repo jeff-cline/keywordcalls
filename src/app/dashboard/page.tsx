@@ -6,7 +6,7 @@ import LogoutButton from "@/components/LogoutButton";
 export const dynamic = "force-dynamic";
 const usd = (c: number) => "$" + (c / 100).toLocaleString("en-US");
 
-export default async function Dashboard({ searchParams }: { searchParams: Promise<{ welcome?: string }> }) {
+export default async function Dashboard({ searchParams }: { searchParams: Promise<{ welcome?: string; funded?: string }> }) {
   const s = await getSession();
   if (!s) redirect("/login");
   if (["god", "vp", "regional", "manager", "rep"].includes(s.role)) redirect("/admin");
@@ -19,6 +19,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const hours = (() => { try { return JSON.parse(c?.hours || "{}"); } catch { return {}; } })();
   const minFund = await db.setting.findUnique({ where: { key: "minFundCents" } });
   const minFundCents = parseInt(minFund?.value || "50000", 10);
+  const funded = (c?.balanceCents || 0) >= minFundCents;
 
   return (
     <div className="min-h-screen bg-[color:var(--soft)]">
@@ -30,18 +31,21 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       </header>
 
       <main className="mx-auto max-w-4xl px-5 py-8 space-y-5">
-        {sp.welcome && <div className="rounded-xl bg-[color:var(--brand)] text-white p-5 text-center">🚀 Your account is live! Fund it below to unlock your <b>first free call</b>.</div>}
+        {sp.funded && <div className="rounded-xl bg-[color:#22c55e] text-white p-5 text-center">✅ Funded! Your first call is unlocked and your campaign is ready to go live. 🚀</div>}
+        {sp.welcome && !sp.funded && <div className="rounded-xl bg-[color:var(--brand)] text-white p-5 text-center">🚀 Your account is live! Fund it below to unlock your <b>first free call</b>.</div>}
 
-        {/* Fund gate (Phase 2 — Stripe) */}
+        {/* Balance + fund gate */}
         <div className="card p-6">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <div className="text-sm text-[color:var(--muted)]">Account balance</div>
               <div className="text-3xl font-extrabold">{usd(c?.balanceCents || 0)}</div>
             </div>
-            <button className="btn" disabled>Add funds (min {usd(minFundCents)}) — coming soon</button>
+            <a href="/dashboard/fund" className="btn">{funded ? "Add more funds" : `Fund your account (min ${usd(minFundCents)}) 🚀`}</a>
           </div>
-          <p className="mt-3 text-sm text-[color:var(--muted)]">Your first call is free — top up your account (minimum {usd(minFundCents)}) to unlock it. Calls are then charged against your balance. <b>Billing is being finalized.</b></p>
+          {funded
+            ? <p className="mt-3 text-sm text-[color:#16a34a] font-medium">✓ You&apos;re funded — your first call is unlocked. Calls are charged against your balance.</p>
+            : <p className="mt-3 text-sm text-[color:var(--muted)]">Your first call is free — fund your account (minimum {usd(minFundCents)}) to unlock it. Calls are then charged against your balance.</p>}
         </div>
 
         {/* Campaign summary */}
@@ -59,7 +63,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
         <div className="card p-6 text-center">
           <div className="font-semibold mb-2">Want a hand getting set up?</div>
-          <a href="https://calendly.com/jdcline/book-onboarding-call" target="_blank" rel="noreferrer" className="btn btn-accent">Book an onboarding call 🚀</a>
+          <a href="/book" className="btn btn-accent">Book an onboarding call 🚀</a>
         </div>
       </main>
     </div>

@@ -35,7 +35,7 @@ export default async function Home() {
           </p>
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link href="/signup" className="btn btn-accent text-base !px-7 !py-3.5">Create an account & get your first call free 🚀</Link>
-            <a href="https://calendly.com/jdcline/book-onboarding-call" target="_blank" rel="noreferrer" className="btn btn-ghost text-base !px-7 !py-3.5">Book an onboarding call</a>
+            <a href="/book" className="btn btn-ghost text-base !px-7 !py-3.5">Book an onboarding call</a>
           </div>
           <div className="mt-4 text-xs text-[color:var(--muted)]">No long-term contract to start · Pre-funded, pay only for the calls you get</div>
         </div>
