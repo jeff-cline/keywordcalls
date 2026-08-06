@@ -28,15 +28,15 @@ export async function GET(req: NextRequest) {
   ]);
   const targets = [...green, ...recent].map((t) => ({ phone: t.phone, name: t.name, email: t.email, city: t.city, state: t.state, calledBack: t.calledBack, calledBackAt: t.calledBackAt, connectSec: t.connectSec, billable: t.billable }));
 
-  // Live delivered/filtered across this campaign's rollout batches (best-effort).
-  let delivered = 0, filtered = 0;
-  for (const b of batches) { if (b.jdiCampaignId) { const ov = await jdiOverview(b.jdiCampaignId); if (ov) { delivered += Number(ov.delivered || 0); filtered += Number(ov.filtered || 0); } } }
+  // Live delivery funnel across this campaign's rollout batches (best-effort, from JDI).
+  let delivered = 0, filtered = 0, loaded = 0, undelivered = 0;
+  for (const b of batches) { if (b.jdiCampaignId) { const ov = await jdiOverview(b.jdiCampaignId); if (ov) { delivered += Number(ov.delivered || 0); filtered += Number(ov.filtered || 0); loaded += Number(ov.numbersLoaded || 0); undelivered += Number(ov.undelivered || 0); } } }
 
   const sent = batches.reduce((a, b) => a + b.size, 0);
   return NextResponse.json({
     ok: true,
     campaign: { id: c.id, name: c.name, hasAudio: !!c.outboundAudioUrl, campaignNumber: c.campaignNumber, listCount, sentTotal: sent, remaining: Math.max(0, listCount - sent) },
-    delivered, filtered, sentCount, calledBackCount, billableCount,
+    delivered, filtered, loaded, undelivered, sentCount, calledBackCount, billableCount,
     batches: batches.map((b) => ({ id: b.id, label: b.label, size: b.size, throttle: b.throttle, launchedAt: b.launchedAt })),
     targets,
     callbacks: callbacks.map((cb) => ({ phone: cb.phone, name: cb.name, email: cb.email, city: cb.city, state: cb.state, landedAt: cb.landedAt, connectSec: cb.connectSec, billable: cb.billable, at: cb.at })),

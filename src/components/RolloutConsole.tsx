@@ -7,7 +7,7 @@ type Target = { phone: string; name: string; email: string; city: string; state:
 type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string };
 type Data = {
   campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; listCount: number; sentTotal: number; remaining: number } | null;
-  delivered: number; filtered: number; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
+  delivered: number; filtered: number; loaded: number; undelivered: number; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
 };
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const mask = (n: string) => (n && n.length >= 4 ? `${n.slice(0, -4)}••${n.slice(-2)}` : n || "unknown");
@@ -110,6 +110,40 @@ export default function RolloutConsole() {
         <Stat label="Callbacks" value={callbacks.toLocaleString()} color="#2f6bff" />
         <Stat label="Billable (120s+)" value={(d?.billableCount || 0).toLocaleString()} sub="counts toward the goal" color="#16a34a" />
         <Stat label="Calls / hour" value={perHour ? perHour.toFixed(1) : "—"} sub={t0 ? `over ${elapsedH.toFixed(1)}h` : ""} color="#ff7a1a" />
+      </div>
+
+      {/* Delivery funnel — where every submitted number went */}
+      <div className="card p-6">
+        <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)] mb-3">Delivery funnel — where every number went</div>
+        {(() => {
+          const submitted = sent;
+          const loaded = d?.loaded || 0;
+          const nonMobile = Math.max(0, submitted - loaded);
+          const dnc = d?.filtered || 0;
+          const noVm = d?.undelivered || 0;
+          const pct = (n: number) => submitted ? `${Math.round((n / submitted) * 100)}%` : "0%";
+          const steps = [
+            { label: "Submitted", n: submitted, color: "#0f1115", note: "numbers you sent" },
+            { label: "Non-mobile / invalid", n: nonMobile, color: "#9ca3af", note: "landlines & VoIP — can't ringless" },
+            { label: "Mobile (loaded)", n: loaded, color: "#2f6bff", note: "RVM-eligible cell phones" },
+            { label: "DNC / litigator scrubbed", n: dnc, color: "#f59e0b", note: "on the Do-Not-Call list" },
+            { label: "No voicemail left", n: noVm, color: "#9ca3af", note: "cleared without a VM" },
+            { label: "Delivered ringless", n: delivered, color: "#16a34a", note: "actual voicemails dropped" },
+            { label: "Called back", n: callbacks, color: "#16d6a5", note: "high-intent leads" },
+          ];
+          return (
+            <div className="space-y-2">
+              {steps.map((s) => (
+                <div key={s.label} className="flex items-center gap-3">
+                  <div className="w-44 text-sm shrink-0">{s.label}</div>
+                  <div className="flex-1 h-6 rounded bg-[color:var(--soft)] overflow-hidden"><div className="h-full rounded flex items-center px-2 text-white text-xs font-bold" style={{ width: `${submitted ? Math.max(4, (s.n / submitted) * 100) : 0}%`, background: s.color }}>{s.n.toLocaleString()}</div></div>
+                  <div className="w-12 text-right text-xs text-[color:var(--muted)]">{pct(s.n)}</div>
+                </div>
+              ))}
+              <div className="text-xs text-[color:var(--muted)] pt-1">Ringless only lands on mobile numbers that aren&apos;t on the DNC list — the biggest drop-offs above tell you your list quality.</div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Time windows */}
