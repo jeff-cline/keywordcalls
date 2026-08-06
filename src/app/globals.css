@@ -28,3 +28,13 @@ a { color: inherit; text-decoration: none; }
 .input { width: 100%; border: 1px solid var(--line); border-radius: .6rem; padding: .6rem .75rem; font-size: .95rem; background: #fff; color: var(--ink); }
 .input:focus { outline: 2px solid var(--brand2); outline-offset: 0; }
 .label { display: block; font-size: .8rem; font-weight: 600; color: var(--muted); margin-bottom: .3rem; }
+
+/* Demo launch animation */
+@keyframes kwcLaunch {
+  0%   { transform: translateY(65vh) rotate(-45deg) scale(0.9); opacity: 0; }
+  12%  { opacity: 1; }
+  100% { transform: translateY(-85vh) rotate(-45deg) scale(1.25); opacity: 0; }
+}
+@keyframes kwcSpin { to { transform: rotate(360deg); } }
+.kwc-rocket { animation: kwcLaunch 1.5s cubic-bezier(.5,0,.9,.4) infinite; }
+.kwc-spin { animation: kwcSpin 1.1s linear infinite; }

@@ -25,6 +25,11 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
   const [demoNumber, setDemoNumber] = useState(initialDemoNumber);
   const [hasAudio, setHasAudio] = useState(initialHasAudio);
   const [numbers, setNumbers] = useState("");
+  const [callbackTarget, setCallbackTarget] = useState("");
+  const [targetSaved, setTargetSaved] = useState(false);
+  const [launching, setLaunching] = useState(false);
+  const [rf, setRf] = useState({ name: "", email: "", password: "" });
+  const [resultsUrl, setResultsUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [events, setEvents] = useState<Ev[]>([]);
@@ -43,20 +48,27 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
   }
   useEffect(() => { poll(); const id = setInterval(poll, 2500); return () => clearInterval(id); }, []);
 
-  async function getNumber() {
-    setBusy(true); setMsg(null);
-    const res = await fetch("/api/demo/provision", { method: "POST" });
-    const j = await res.json().catch(() => ({}));
-    setBusy(false);
-    if (res.ok) { setDemoNumber(j.number); setMsg(`Demo number ready: ${j.number}`); } else setMsg(j.error || "Could not get a number.");
+  async function saveTarget() {
+    const res = await fetch("/api/demo/target", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ number: callbackTarget }) });
+    setTargetSaved(res.ok);
   }
   async function go() {
-    setBusy(true); setMsg(null);
+    setMsg(null);
+    // Ensure the backend Twilio number exists (silent — never shown to prospects).
+    if (!demoNumber) { const pr = await fetch("/api/demo/provision", { method: "POST" }); const pj = await pr.json().catch(() => ({})); if (pj.number) setDemoNumber(pj.number); }
+    if (callbackTarget && !targetSaved) await saveTarget();
+    setLaunching(true);
     const res = await fetch("/api/demo/go", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ numbers }) });
     const j = await res.json().catch(() => ({}));
+    // Keep the rocket + "Processing" up for 7s so the voicemails land, then reveal results.
+    setTimeout(() => { setLaunching(false); setMsg(res.ok ? `🚀 Dropped ${j.placed} voicemail${j.placed === 1 ? "" : "s"} — watch the board.` : (j.error || "Failed.")); poll(); }, 7000);
+  }
+  async function getResults() {
+    setBusy(true); setMsg(null);
+    const res = await fetch("/api/results/signup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...rf, ltvDollars: ltv }) });
+    const j = await res.json().catch(() => ({}));
     setBusy(false);
-    setMsg(res.ok ? `🚀 Dialing ${j.placed} number${j.placed === 1 ? "" : "s"} — watch the board for voicemails left vs not connected.` : (j.error || "Failed."));
-    poll();
+    if (res.ok) setResultsUrl(j.url); else setMsg(j.error || "Could not create your results.");
   }
 
   const [lead, setLead] = useState<{ phone: string; found: boolean; lead?: { name: string; email: string; city: string; state: string; zip: string } } | null>(null);
@@ -129,22 +141,23 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
           <div className="space-y-5">
             <div><div className="text-sm font-bold uppercase tracking-wide text-white/50 mb-2">1 · Record your voicemail</div><DemoRecorder hasAudio={hasAudio} onSaved={() => setHasAudio(true)} /></div>
             <div>
-              <div className="text-sm font-bold uppercase tracking-wide text-white/50 mb-2">2 · Phone numbers</div>
+              <div className="text-sm font-bold uppercase tracking-wide text-white/50 mb-2">2 · Set number to receive callbacks</div>
+              <input className="w-full rounded-xl bg-white/5 border border-white/10 p-3 text-white text-sm" placeholder="Your phone — rings when they call back" value={callbackTarget} onChange={(e) => { setCallbackTarget(e.target.value); setTargetSaved(false); }} onBlur={saveTarget} />
+              {targetSaved && <div className="text-xs text-green-400 mt-1">✓ callbacks will ring this number</div>}
+            </div>
+            <div>
+              <div className="text-sm font-bold uppercase tracking-wide text-white/50 mb-2">3 · Phone numbers to test</div>
               <textarea className="w-full rounded-xl bg-white/5 border border-white/10 p-3 text-white text-sm" rows={4} placeholder="One per line — e.g. (972) 800-6670" value={numbers} onChange={(e) => setNumbers(e.target.value)} />
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <button className="btn !bg-[color:#ff7a1a] text-white !border-0 text-base !px-7" disabled={busy || !hasAudio} onClick={go}>🚀 Go — leave the voicemails</button>
-              {!hasAudio && <span className="text-xs text-white/50">record a voicemail first</span>}
+            <div>
+              <div className="text-sm font-bold uppercase tracking-wide text-white/50 mb-2">4 · Click Go to leave voicemails</div>
+              <button className="btn !bg-[color:#ff7a1a] text-white !border-0 text-base !px-7 w-full" disabled={launching || !hasAudio} onClick={go}>🚀 Go — leave the voicemails</button>
+              {!hasAudio && <span className="text-xs text-white/50 block mt-1">record a voicemail first</span>}
             </div>
             {msg && <div className="text-sm text-green-300">{msg}</div>}
-            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
-              <div className="text-sm font-bold uppercase tracking-wide text-white/50 mb-1">3 · Pick callback number to receive calls</div>
-              {demoNumber
-                ? <div className="text-2xl font-extrabold tracking-wide">{demoNumber}</div>
-                : <button className="btn btn-primary mt-1" disabled={busy} onClick={getNumber}>Acquire callback number</button>}
-            </div>
           </div>
 
+          <div className="space-y-6">
           {/* Live board */}
           <div className="rounded-2xl bg-black/30 border border-white/10 p-5">
             {/* Activation success */}
@@ -183,8 +196,42 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
               })}
             </div>
           </div>
+
+          {/* Get Results → account + PDF */}
+          <div className="rounded-2xl bg-white text-[color:var(--ink)] p-5">
+            <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Get your results</div>
+            <div className="mt-1 text-sm text-[color:var(--muted)]"><b className="text-[color:var(--ink)]">{drops}</b> voicemails left · <b className="text-[color:var(--ink)]">{callbacks}</b> callbacks · lifelong value <b className="text-[color:var(--ink)]">${(parseFloat(ltv) || 0).toLocaleString()}</b></div>
+            {resultsUrl ? (
+              <div className="mt-3 space-y-2">
+                <div className="text-sm text-green-700 font-medium">✓ Account created — we emailed your results.</div>
+                <div className="flex flex-wrap gap-2">
+                  <a href={resultsUrl} target="_blank" rel="noopener" className="btn btn-primary text-sm">View my results →</a>
+                  <a href={`/api/results/pdf?ltv=${(parseFloat(ltv) || 0).toFixed(0)}`} target="_blank" rel="noopener" className="btn btn-ghost text-sm">⬇ Download PDF</a>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 grid gap-2">
+                <input className="input !py-2" placeholder="Your name" value={rf.name} onChange={(e) => setRf((p) => ({ ...p, name: e.target.value }))} />
+                <input className="input !py-2" placeholder="Email" value={rf.email} onChange={(e) => setRf((p) => ({ ...p, email: e.target.value }))} />
+                <input className="input !py-2" type="password" placeholder="Pick a password" value={rf.password} onChange={(e) => setRf((p) => ({ ...p, password: e.target.value }))} />
+                <button className="btn !bg-[color:#ff7a1a] text-white !border-0" disabled={busy} onClick={getResults}>{busy ? "Creating…" : "Get results & create account 🚀"}</button>
+                <div className="text-[11px] text-[color:var(--muted)]">We&apos;ll create your account and email your branded results PDF.</div>
+              </div>
+            )}
+          </div>
+          </div>
         </div>
       </section>
+
+      {/* Launch animation overlay */}
+      {launching && (
+        <div className="fixed inset-0 z-[100] bg-[#0b1020] flex flex-col items-center justify-center overflow-hidden">
+          <div className="kwc-rocket absolute text-7xl" style={{ bottom: 0 }}>🚀</div>
+          <img src="/logo.png" alt="KeywordCalls" className="kwc-spin w-28 h-auto brightness-0 invert" />
+          <div className="mt-6 text-white font-extrabold text-2xl tracking-widest uppercase">Processing…</div>
+          <div className="mt-2 text-white/50 text-sm">Leaving your voicemails</div>
+        </div>
+      )}
 
       {/* Lead-append modal */}
       {lead && (

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { getTwilioCfg, placeCallTwiml } from "@/lib/twilio";
 
@@ -26,6 +27,15 @@ export async function POST(req: NextRequest) {
   for (const n of list) {
     const r = await placeCallTwiml(n, `${BASE}/api/demo/drop-twiml`, cfg.demoNumber, tw, { amd: true, statusCallback: `${BASE}/api/demo/status?to=${encodeURIComponent(n)}` });
     if (r.ok) placed++;
+    // Persist to the ongoing "Demoed" list with any appended data we have.
+    const digits = n.replace(/\D/g, "").slice(-10);
+    const c = digits ? await db.listContact.findFirst({ where: { OR: [{ phone: { contains: digits } }, { altPhones: { contains: digits } }] } }).catch(() => null) : null;
+    const appended = c ? { name: `${c.firstName} ${c.lastName}`.trim(), email: c.email, city: c.city, state: c.state, zip: c.zip } : {};
+    await db.demoContact.upsert({
+      where: { phone: n },
+      update: { timesDemoed: { increment: 1 }, lastDemoedAt: new Date(), ...appended },
+      create: { phone: n, ...appended },
+    }).catch(() => {});
   }
   return NextResponse.json({ ok: true, placed, attempted: list.length });
 }

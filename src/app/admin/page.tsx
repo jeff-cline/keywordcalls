@@ -50,6 +50,7 @@ export default async function Admin() {
           <div className="flex gap-2">
             <a href="/admin/customers" className="btn btn-primary text-sm">Customers & campaigns</a>
             <a href="/admin/campaigns" className="btn btn-ghost text-sm">📣 Outbound campaigns</a>
+            <a href="/admin/demoed" className="btn btn-ghost text-sm">🎯 Demoed</a>
             <a href="/admin/calls" className="btn btn-ghost text-sm">📞 Call marketplace</a>
             <a href="/admin/settings" className="btn btn-ghost text-sm">⚙️ Integrations & coupons</a>
           </div>

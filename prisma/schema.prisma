@@ -55,6 +55,8 @@ model Customer {
   bidsJson        String    @default("{}") // JSON { keyword: bidCents } — what they'll pay per call
   status          String    @default("new") // new | funded | live | paused
   referredBy      String? // ref account id (affiliate attribution)
+  ltvCents        Int       @default(0) // customer lifetime value (from Get Results / results page)
+  resultsToken    String    @default("") // token for their branded results page + PDF
   autoTopUp       Boolean   @default(false) // auto-charge saved card when low
   autoTopUpAmountCents Int  @default(0) // how much to add on auto-top-up
   lowBalanceNotifiedAt DateTime? // last "running low" email (reset on top-up)
@@ -199,6 +201,23 @@ model PhoneNumber {
   @@index([moneyWord])
   @@index([status])
   @@map("phone_number")
+}
+
+// Persistent record of everyone we've demoed the system to (numbers dropped from /demo) + append.
+model DemoContact {
+  id           String   @id @default(cuid())
+  phone        String   @unique
+  name         String   @default("")
+  email        String   @default("")
+  city         String   @default("")
+  state        String   @default("")
+  zip          String   @default("")
+  appended     String   @default("{}") // extra appended fields (JSON)
+  timesDemoed  Int      @default(1)
+  lastDemoedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  @@index([lastDemoedAt])
+  @@map("demo_contact")
 }
 
 // Live-demo activity feed (voicemails left + real callbacks) for trade-show demos.
