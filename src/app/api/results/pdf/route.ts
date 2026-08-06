@@ -5,7 +5,7 @@ import { resultsPdf } from "@/lib/pdf";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Download the branded results PDF (by token, or by ltv for the pre-signup preview).
+// Download the branded, interactive results PDF: LTV→ROAS + the real live-test data.
 export async function GET(req: NextRequest) {
   const u = new URL(req.url);
   const token = u.searchParams.get("t") || "";
@@ -15,6 +15,19 @@ export async function GET(req: NextRequest) {
     const c = await db.customer.findFirst({ where: { resultsToken: token }, include: { account: true } });
     if (c) { name = `${c.account.firstName} ${c.account.lastName}`.trim() || "your business"; ltvCents = c.ltvCents; }
   }
-  const pdf = await resultsPdf(name, ltvCents);
+  if (!ltvCents) ltvCents = 300000;
+
+  // Pull the live test data + appended names.
+  const [events, contacts] = await Promise.all([
+    db.demoEvent.findMany({ where: { kind: { in: ["drop", "callback"] } }, orderBy: { createdAt: "desc" }, take: 40 }),
+    db.demoContact.findMany({ select: { phone: true, name: true }, take: 500 }),
+  ]);
+  const nameByDigits = new Map<string, string>();
+  for (const c of contacts) { const d = c.phone.replace(/\D/g, "").slice(-10); if (d) nameByDigits.set(d, c.name); }
+  const nameFor = (phone: string) => nameByDigits.get(phone.replace(/\D/g, "").slice(-10)) || "";
+  const drops = events.filter((e) => e.kind === "drop").map((e) => ({ phone: e.phone, name: nameFor(e.phone), at: e.createdAt }));
+  const callbacks = events.filter((e) => e.kind === "callback").map((e) => ({ phone: e.phone, name: nameFor(e.phone), at: e.createdAt }));
+
+  const pdf = await resultsPdf({ name, ltvCents, drops, callbacks });
   return new Response(new Uint8Array(pdf), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="keywordcalls-results.pdf"` } });
 }
