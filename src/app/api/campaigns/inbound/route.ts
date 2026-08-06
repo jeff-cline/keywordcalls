@@ -21,6 +21,12 @@ export async function POST(req: NextRequest) {
     : await db.outreachCampaign.findFirst({ where: { campaignNumber: to } });
   if (!c) return xml(`<Say voice="Polly.Joanna-Neural">This number is not in service.</Say><Hangup/>`);
   await db.outreachCampaign.update({ where: { id: c.id }, data: { connectedCount: { increment: 1 }, revenueCents: { increment: c.bidCents } } }).catch(() => {});
+  // Log the callback with any appended data → powers the /rollout time-series + lead identity.
+  (async () => {
+    const digits = from.replace(/\D/g, "").slice(-10);
+    const ct = digits ? await db.listContact.findFirst({ where: { OR: [{ phone: { contains: digits } }, { altPhones: { contains: digits } }] } }).catch(() => null) : null;
+    await db.campaignCallback.create({ data: { campaignId: c.id, phone: from, name: ct ? `${ct.firstName} ${ct.lastName}`.trim() : "", email: ct?.email || "", city: ct?.city || "", state: ct?.state || "" } }).catch(() => {});
+  })().catch(() => {});
 
   const dest = e164(c.routingNumber);
   if (campaignOpen(c) && dest && dest.length >= 11) {

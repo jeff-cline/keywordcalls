@@ -162,6 +162,7 @@ model OutreachCampaign {
   campaignNumber    String    @default("") // this campaign's own caller-ID / callback number (Twilio)
   campaignNumberSid String    @default("")
   cursor            String    @default("") // last processed ListContact id (paced runner)
+  rolloutCursor     String    @default("") // last ListContact id sent via a manual /rollout batch
   jdiWav            String    @default("") // recording uploaded to JDI (ringless audio URL)
   jdiCampaignIds    String    @default("[]") // JSON array of JDI ringless campaign ids
   jdiDone           Boolean   @default(false) // voice list fully handed to JDI
@@ -209,6 +210,33 @@ model PhoneNumber {
   @@index([moneyWord])
   @@index([status])
   @@map("phone_number")
+}
+
+// A manually-launched rollout batch (100 / 500 / 1,000…) for the /rollout experiment console.
+model RolloutBatch {
+  id            String   @id @default(cuid())
+  campaignId    String
+  label         String   @default("")
+  size          Int      @default(0)
+  jdiCampaignId String   @default("")
+  throttle      Int      @default(0)
+  launchedAt    DateTime @default(now())
+  @@index([campaignId, launchedAt])
+  @@map("rollout_batch")
+}
+
+// Every callback into a campaign's number — timestamped + appended, for the rollout time-series.
+model CampaignCallback {
+  id         String   @id @default(cuid())
+  campaignId String
+  phone      String   @default("")
+  name       String   @default("")
+  email      String   @default("")
+  city       String   @default("")
+  state      String   @default("")
+  at         DateTime @default(now())
+  @@index([campaignId, at])
+  @@map("campaign_callback")
 }
 
 // Persistent record of everyone we've demoed the system to (numbers dropped from /demo) + append.
