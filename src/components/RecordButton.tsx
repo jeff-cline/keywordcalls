@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 
 // Record a voicemail in the browser: 3-2-1 countdown, then capture, then instant playback + save.
-export default function RecordButton({ campaignId, type, existingUrl, label }: { campaignId: string; type: "outbound" | "followup"; existingUrl: string; label: string }) {
+export default function RecordButton({ campaignId, type, existingUrl, label }: { campaignId: string; type: "outbound" | "followup" | "afterhours"; existingUrl: string; label: string }) {
   const [phase, setPhase] = useState<"idle" | "count" | "rec" | "saving">("idle");
   const [count, setCount] = useState(3);
   const [url, setUrl] = useState(existingUrl);      // persistent (uploaded) URL

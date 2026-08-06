@@ -149,6 +149,8 @@ model OutreachCampaign {
   callsPerMin       Int       @default(30) // voicemail-drop throttle for this campaign
   outboundAudioUrl  String    @default("") // played to the voicemail machine
   followupAudioUrl  String    @default("") // next-day follow-up voicemail
+  afterHoursAudioUrl String   @default("") // "sorry we missed you, call us back" — live recovery + 10am re-drop
+  afterHoursJdiWav  String    @default("") // afterHoursAudioUrl uploaded into JDI's library
   afterHoursMessage String    @default("Sorry, we're closed. Can we follow up with you during normal business hours?")
   followupMessage   String    @default("I tried to follow up with you earlier. Please give me a call back.")
   emailSubject      String    @default("")
@@ -260,8 +262,12 @@ model CampaignCallback {
   landedAt   String   @default("") // the number the call was routed to (campaign owner)
   connectSec Int      @default(0)  // seconds connected on the transferred leg
   billable   Boolean  @default(false) // connectSec >= 120
+  outcome    String   @default("") // connected | after_hours | no_answer | abandoned
+  redropped  Boolean  @default(false) // a 10am recovery voicemail was sent to this lead
+  redroppedAt DateTime?
   at         DateTime @default(now())
   @@index([campaignId, at])
+  @@index([outcome, redropped])
   @@map("campaign_callback")
 }
 

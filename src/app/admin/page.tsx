@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
-import { getSession, isStaff } from "@/lib/auth";
+import { getSession, isStaff, isGod } from "@/lib/auth";
 import { db } from "@/lib/db";
 import LogoutButton from "@/components/LogoutButton";
+import AdminStats from "@/components/AdminStats";
+import { computeAdminStats } from "@/lib/adminStats";
 
 export const dynamic = "force-dynamic";
 const usd = (c: number) => "$" + (c / 100).toLocaleString("en-US", { minimumFractionDigits: 2 });
@@ -39,7 +41,7 @@ export default async function Admin() {
     <div className="min-h-screen bg-[color:var(--soft)]">
       <header className="bg-white border-b border-[color:var(--line)]">
         <div className="mx-auto max-w-5xl px-5 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3"><img src="/logo.png" alt="KeywordCalls" className="h-8 w-auto" /><span className="rounded-full bg-[color:var(--brand)] text-white text-[11px] font-bold px-2 py-0.5 uppercase">{s.role}</span></div>
+          <div className="flex items-center gap-3"><img src="/logo.png" alt="KeywordCalls" className="h-8 w-auto" /><span className="rounded-full bg-[color:var(--brand)] text-white text-[11px] font-bold px-2 py-0.5 uppercase">{s.role}</span>{isGod(s) && <a href="/rollout" className="rounded-full bg-[color:#ff7a1a] hover:bg-[color:#e86d0f] text-white text-[11px] font-bold px-3 py-0.5 uppercase">🚀 Rollout</a>}</div>
           <div className="flex items-center gap-3 text-sm"><span className="text-[color:var(--muted)]">{s.name}</span><LogoutButton /></div>
         </div>
       </header>

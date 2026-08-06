@@ -14,6 +14,24 @@ export async function GET(req: NextRequest) {
   const u = new URL(req.url);
   const campaignId = u.searchParams.get("campaignId") || "";
   const combined = u.searchParams.get("combined") === "1";
+  const afterhours = u.searchParams.get("afterhours") === "1";
+
+  // After Hours Callback view: everyone who called back but didn't reach an agent (after-hours or
+  // the center didn't answer), plus whether the 10am recovery re-drop has gone out.
+  if (afterhours) {
+    const template = (await db.outreachCampaign.findFirst({ where: { rolloutGroup: "A" } })) || (await db.outreachCampaign.findFirst({ orderBy: { createdAt: "asc" } }));
+    const [missed, pending, recovered] = await Promise.all([
+      db.campaignCallback.findMany({ where: { outcome: { in: ["after_hours", "no_answer"] } }, orderBy: { at: "desc" }, take: 500 }),
+      db.campaignCallback.count({ where: { outcome: { in: ["after_hours", "no_answer"] }, redropped: false } }),
+      db.campaignCallback.count({ where: { redropped: true } }),
+    ]);
+    return NextResponse.json({
+      ok: true, afterhours: true,
+      template: template ? { id: template.id, name: template.name, hasAfterHoursAudio: !!template.afterHoursAudioUrl } : null,
+      summary: { missed: missed.length, pending, recovered },
+      rows: missed.map((m) => ({ phone: m.phone, name: m.name, email: m.email, city: m.city, state: m.state, outcome: m.outcome, redropped: m.redropped, redroppedAt: m.redroppedAt, at: m.at })),
+    });
+  }
 
   // Tabs: all tagged rollout campaigns; fall back to the first campaign as group "A".
   let tests = await db.outreachCampaign.findMany({ where: { rolloutGroup: { not: "" } }, orderBy: { rolloutGroup: "asc" }, select: { id: true, name: true, rolloutGroup: true } });

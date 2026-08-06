@@ -26,17 +26,20 @@ export async function POST(req: NextRequest) {
   const dest = e164(c.routingNumber);
   const digits = from.replace(/\D/g, "").slice(-10);
   const ct = digits ? await db.listContact.findFirst({ where: { OR: [{ phone: { contains: digits } }, { altPhones: { contains: digits } }] } }).catch(() => null) : null;
-  const cb = await db.campaignCallback.create({ data: { campaignId: c.id, phone: from, name: ct ? `${ct.firstName} ${ct.lastName}`.trim() : "", email: ct?.email || "", city: ct?.city || "", state: ct?.state || "", landedAt: dest || "" } }).catch(() => null);
+  const inHours = campaignOpen(c) && !!dest && dest.length >= 11;
+  const cb = await db.campaignCallback.create({ data: { campaignId: c.id, phone: from, name: ct ? `${ct.firstName} ${ct.lastName}`.trim() : "", email: ct?.email || "", city: ct?.city || "", state: ct?.state || "", landedAt: dest || "", outcome: inHours ? "" : "after_hours" } }).catch(() => null);
   // Flip the matching sent-target "green" on the rollout console, recording where it routed.
   if (digits) await db.rolloutTarget.updateMany({ where: { campaignId: c.id, phone: { contains: digits } }, data: { calledBack: true, calledBackAt: new Date(), landedAt: dest || "" } }).catch(() => {});
 
-  if (campaignOpen(c) && dest && dest.length >= 11) {
+  if (inHours) {
     // In hours → connect the live callback to the owner (real caller shown). The Dial `action` posts
-    // back the transferred-leg talk time → we record connectSec and bill at 120s+.
+    // back the transferred-leg talk time → we record connectSec and bill at 120s+, or flag no-answer.
     const callerAttr = from ? ` callerId="${from}"` : "";
     const action = `https://keywordcalls.com/api/campaigns/dial-status?cb=${encodeURIComponent(cb?.id || "")}`;
     return xml(`<Dial${callerAttr} timeout="25" action="${action}" method="POST"><Number>${dest}</Number></Dial>`);
   }
-  // After hours (or no destination set) → play the closed message.
+  // After hours (or no destination set) → capture the lead for the 10am re-drop and play the closed
+  // message (the recorded "we missed you" voicemail if there is one, otherwise the text prompt).
+  if (c.afterHoursAudioUrl) return xml(`<Play>${esc(c.afterHoursAudioUrl)}</Play><Hangup/>`);
   return xml(`<Say voice="Polly.Joanna-Neural">${esc(c.afterHoursMessage)}</Say><Hangup/>`);
 }

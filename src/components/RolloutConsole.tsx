@@ -10,6 +10,8 @@ type Data = {
   delivered: number; filtered: number; loaded: number; undelivered: number; inQueue: number; processing: boolean; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
   tests: { id: string; name: string; rolloutGroup: string }[]; cap: { maxPerHour: number };
 };
+type AhRow = { phone: string; name: string; email: string; city: string; state: string; outcome: string; redropped: boolean; redroppedAt: string | null; at: string };
+type AhData = { ok: boolean; afterhours: true; template: { id: string; name: string; hasAfterHoursAudio: boolean } | null; summary: { missed: number; pending: number; recovered: number }; rows: AhRow[] };
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const mask = (n: string) => (n && n.length >= 4 ? `${n.slice(0, -4)}••${n.slice(-2)}` : n || "unknown");
 const HOUR = 3600e3, DAY = 24 * HOUR;
@@ -30,10 +32,25 @@ export default function RolloutConsole() {
   const [addOpen, setAddOpen] = useState(false);         // the "name your test + pick file" dialog
   const [addName, setAddName] = useState("");
   const [addFile, setAddFile] = useState<File | null>(null);
+  const [ah, setAh] = useState<AhData | null>(null);      // After Hours Callback view data
+  const [redropBusy, setRedropBusy] = useState(false);
 
   const tabQuery = tab === "combined" ? "?combined=1" : tab ? `?campaignId=${encodeURIComponent(tab)}` : "";
-  async function load() { const r = await fetch("/api/rollout/data" + tabQuery); if (r.ok) setD(await r.json()); }
+  async function load() {
+    if (tab === "afterhours") { const r = await fetch("/api/rollout/data?afterhours=1"); if (r.ok) setAh(await r.json()); return; }
+    const r = await fetch("/api/rollout/data" + tabQuery); if (r.ok) setD(await r.json());
+  }
   useEffect(() => { load(); const id = setInterval(load, 5000); return () => clearInterval(id); }, [tab]); // eslint-disable-line
+
+  async function runRedrop() {
+    if (!confirm("Send the recovery voicemail now to everyone who hasn't been re-dropped yet?")) return;
+    setRedropBusy(true);
+    const r = await fetch("/api/rollout/redrop", { method: "POST" });
+    const j = await r.json().catch(() => ({}));
+    setRedropBusy(false);
+    setMsg(r.ok ? `♻️ Recovery sent to ${j.totalSent ?? 0}.` : (j.error || "Re-drop failed."));
+    load();
+  }
 
   // Add a new lead-set test: name it + upload a CSV → clones the current settings into a new A/B/C/D campaign.
   async function addTest() {
@@ -127,12 +144,60 @@ export default function RolloutConsole() {
           ))}
           <button onClick={() => { setTab("combined"); setShowAllSent(false); }}
             className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${isCombined ? "bg-[color:var(--brand2)] text-white" : "bg-[color:var(--soft)] text-[color:var(--ink)]"}`}>All Combined</button>
+          <button onClick={() => { setTab("afterhours"); setShowAllSent(false); }}
+            className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${tab === "afterhours" ? "bg-[color:#ff7a1a] text-white" : "bg-[color:var(--soft)] text-[color:var(--ink)]"}`}>🌙 After Hours Callback{ah?.summary?.pending ? ` (${ah.summary.pending})` : ""}</button>
           <div className="flex-1" />
           <button onClick={() => { setAddOpen(true); setMsg(null); }} className="px-3 py-1.5 rounded-lg text-sm font-semibold cursor-pointer text-white bg-[#16a34a] hover:bg-[#15803d]">＋ Add Test</button>
         </div>
         <div className="text-[11px] text-[color:var(--muted)] mt-2">Each test is a separate lead file run with these exact settings — compare which list performs best. “All Combined” totals every test together.</div>
       </div>
 
+      {tab === "afterhours" ? (
+        /* ===== After Hours Callback view ===== */
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Stat label="Missed callbacks" value={(ah?.summary?.missed || 0).toLocaleString()} sub="after-hours + no-answer" color="#ff7a1a" />
+            <Stat label="Pending re-drop" value={(ah?.summary?.pending || 0).toLocaleString()} sub="waiting for 10am ET" color="#f59e0b" />
+            <Stat label="Recovered (re-dropped)" value={(ah?.summary?.recovered || 0).toLocaleString()} sub="fresh voicemail sent" color="#16a34a" />
+          </div>
+
+          <div className="card p-6">
+            <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)] mb-2">“We missed you” recovery voicemail</div>
+            <p className="text-sm text-[color:var(--muted)] mb-3">Played live when the call center doesn&apos;t pick up, and re-dropped automatically at <b>10:00 AM ET</b> (9:00 AM your time) the next morning to everyone we couldn&apos;t connect — asking them to call back during business hours.</p>
+            {ah?.template
+              ? <>{ah.template.hasAfterHoursAudio && <div className="text-sm text-[color:#16a34a] mb-2">✓ Recorded — re-record any time below.</div>}
+                  <RecordButton campaignId={ah.template.id} type="afterhours" existingUrl="" label="Record your after-hours / call-back voicemail" /></>
+              : <div className="text-sm text-[color:var(--muted)]">No campaign yet.</div>}
+            <div className="mt-3 flex items-center gap-2">
+              <button className="btn !bg-[color:#16a34a] text-white !border-0" disabled={redropBusy || !ah?.summary?.pending || !ah?.template?.hasAfterHoursAudio} onClick={runRedrop}>{redropBusy ? "Sending…" : `♻️ Send recovery now (${ah?.summary?.pending || 0})`}</button>
+              <span className="text-xs text-[color:var(--muted)]">Or wait for the automatic 10 AM ET re-drop.</span>
+            </div>
+            {msg && <div className="text-sm text-green-700 mt-2">{msg}</div>}
+          </div>
+
+          <div className="card p-0 overflow-hidden">
+            <div className="p-4 text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Missed & recovered callbacks</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Why missed</th><th className="py-2 px-4">Name</th><th className="py-2 px-4">Phone</th><th className="py-2 px-4">Location</th><th className="py-2 px-4">Recovery</th><th className="py-2 px-4">Called back</th></tr></thead>
+                <tbody>
+                  {(!ah?.rows || ah.rows.length === 0) && <tr><td colSpan={6} className="py-6 px-4 text-[color:var(--muted)]">No missed callbacks yet — everyone who called back reached an agent.</td></tr>}
+                  {(ah?.rows || []).map((r, i) => (
+                    <tr key={i} className="border-b border-[color:var(--line)] last:border-0">
+                      <td className="py-2 px-4">{r.outcome === "after_hours" ? <span className="rounded-full bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5">🌙 After hours</span> : <span className="rounded-full bg-red-100 text-red-800 text-xs font-semibold px-2 py-0.5">📵 No answer</span>}</td>
+                      <td className="py-2 px-4 font-medium">{r.name || <span className="text-[color:var(--muted)]">unknown</span>}</td>
+                      <td className="py-2 px-4">{mask(r.phone)}</td>
+                      <td className="py-2 px-4 text-[color:var(--muted)]">{[r.city, r.state].filter(Boolean).join(", ") || "—"}</td>
+                      <td className="py-2 px-4">{r.redropped ? <span className="text-[color:#16a34a] font-semibold">♻️ Re-dropped{r.redroppedAt ? ` ${new Date(r.redroppedAt).toLocaleDateString()}` : ""}</span> : <span className="text-amber-700 text-xs">pending 10 AM</span>}</td>
+                      <td className="py-2 px-4 text-[color:var(--muted)] whitespace-nowrap">{new Date(r.at).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : (<>
       {/* Record outbound voicemail — right here */}
       {d?.campaign && !isCombined && (
         <div className="card p-6">
@@ -345,6 +410,8 @@ export default function RolloutConsole() {
           </table>
         </div>
       </div>
+
+      </>)}
 
       {/* Add Test dialog — name it, then pick the lead file */}
       {addOpen && (
