@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession, isStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import LogoutButton from "@/components/LogoutButton";
+import LeadsTabs from "@/components/LeadsTabs";
 import { resultsFor, usd } from "@/lib/results";
 
 export const dynamic = "force-dynamic";
@@ -29,9 +30,16 @@ export default async function LeadsPage() {
           <div className="flex items-center gap-3 text-sm"><a href="/admin" className="btn btn-ghost text-sm">← Admin</a><LogoutButton /></div>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-5 py-8">
-        <h1 className="text-2xl font-bold mb-1">Leads 🧲</h1>
-        <p className="text-sm text-[color:var(--muted)] mb-5">Everyone who ran the demo / created a results PDF — {rows.length} on file. These are real, named inbound leads.</p>
+      <main className="mx-auto max-w-5xl px-5 py-8 space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold mb-1">Leads 🧲</h1>
+          <p className="text-sm text-[color:var(--muted)] mb-5"><b>Consumer leads</b> are the people who called back and connected (that&apos;s where the money is). <b>Business leads</b> are the prospect pool we&apos;re reaching out to.</p>
+          <LeadsTabs />
+        </div>
+
+        <div>
+        <h2 className="text-lg font-bold mb-1">Demo / results-PDF leads</h2>
+        <p className="text-sm text-[color:var(--muted)] mb-3">Everyone who ran the demo / created a results PDF — {rows.length} on file.</p>
         <div className="card p-0 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -51,6 +59,7 @@ export default async function LeadsPage() {
               </tbody>
             </table>
           </div>
+        </div>
         </div>
       </main>
     </div>

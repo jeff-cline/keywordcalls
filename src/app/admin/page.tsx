@@ -13,29 +13,11 @@ export default async function Admin() {
   if (!s) redirect("/login");
   if (!isStaff(s)) redirect("/dashboard");
 
-  const [customers, contacts, plans, keywords, recent, callAgg, inboundCalls, liveCampaigns, funded, emailsSent, emailCogsSetting] = await Promise.all([
-    db.customer.count(),
-    db.contactLead.count(),
-    db.plan.findMany({ orderBy: { sortOrder: "asc" } }),
-    db.keyword.findMany({ orderBy: { sortOrder: "asc" } }),
+  // Live economics (inbound marketplace + outbound rollout) — initial values; AdminStats then polls.
+  const [recent, stats] = await Promise.all([
     db.account.findMany({ where: { role: "customer" }, orderBy: { createdAt: "desc" }, take: 15, include: { customer: true } }),
-    db.call.aggregate({ where: { billed: true }, _count: true, _sum: { chargedCents: true, costCents: true } }),
-    db.call.count(),
-    db.customer.count({ where: { status: "live" } }),
-    db.customer.aggregate({ _sum: { balanceCents: true } }),
-    db.emailLog.count({ where: { ok: true } }),
-    db.setting.findUnique({ where: { key: "emailCogsCents" } }),
+    computeAdminStats(),
   ]);
-
-  // Economics: revenue = per-call charges to customers; cost = real Twilio + email COGS (5¢/email).
-  const revenueCents = callAgg._sum.chargedCents || 0;
-  const emailCogsCents = parseInt(emailCogsSetting?.value || "5", 10);
-  const emailCostCents = emailsSent * emailCogsCents;
-  const twilioCostCents = callAgg._sum.costCents || 0;
-  const totalCostCents = twilioCostCents + emailCostCents;
-  const marginCents = revenueCents - totalCostCents;
-  const roas = totalCostCents > 0 ? revenueCents / totalCostCents : 0;
-  const balanceOnHand = funded._sum.balanceCents || 0;
 
   return (
     <div className="min-h-screen bg-[color:var(--soft)]">
@@ -60,19 +42,8 @@ export default async function Admin() {
           </div>
         </div>
 
-        {/* Economics dashboard */}
-        <div className="grid gap-4 sm:grid-cols-4">
-          <div className="card p-5"><div className="text-xs uppercase text-[color:var(--muted)]">Revenue (calls)</div><div className="text-3xl font-extrabold">{usd(revenueCents)}</div><div className="text-xs text-[color:var(--muted)]">{callAgg._count} billed</div></div>
-          <div className="card p-5"><div className="text-xs uppercase text-[color:var(--muted)]">Cost to run</div><div className="text-3xl font-extrabold">{usd(totalCostCents)}</div><div className="text-xs text-[color:var(--muted)]">Twilio {usd(twilioCostCents)} · email {usd(emailCostCents)}</div></div>
-          <div className="card p-5"><div className="text-xs uppercase text-[color:var(--muted)]">Margin</div><div className="text-3xl font-extrabold text-[color:#16a34a]">{usd(marginCents)}</div></div>
-          <div className="card p-5"><div className="text-xs uppercase text-[color:var(--muted)]">ROAS</div><div className="text-3xl font-extrabold">{roas ? roas.toFixed(1) + "×" : "—"}</div><div className="text-xs text-[color:var(--muted)]">revenue ÷ cost</div></div>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-4">
-          <div className="card p-5"><div className="text-xs uppercase text-[color:var(--muted)]">Inbound calls</div><div className="text-3xl font-extrabold">{inboundCalls}</div></div>
-          <div className="card p-5"><div className="text-xs uppercase text-[color:var(--muted)]">Live campaigns</div><div className="text-3xl font-extrabold">{liveCampaigns}<span className="text-base font-medium text-[color:var(--muted)]"> / {customers}</span></div></div>
-          <div className="card p-5"><div className="text-xs uppercase text-[color:var(--muted)]">Customer balances</div><div className="text-3xl font-extrabold">{usd(balanceOnHand)}</div><div className="text-xs text-[color:var(--muted)]">funds on hand</div></div>
-          <div className="card p-5"><div className="text-xs uppercase text-[color:var(--muted)]">Emails sent</div><div className="text-3xl font-extrabold">{emailsSent}</div><div className="text-xs text-[color:var(--muted)]">@ {usd(emailCogsCents)} ea</div></div>
-        </div>
+        {/* Economics dashboard — live (inbound marketplace + outbound rollout) */}
+        <AdminStats initial={stats} />
 
         <div className="card p-6">
           <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)] mb-3">Recent customers</div>
