@@ -1,41 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getSettings } from "@/lib/settings";
-import { getTwilioCfg, placeCallTwiml } from "@/lib/twilio";
+import { getSettings, setSetting } from "@/lib/settings";
+import { jdiConfigured, jdiScrub, jdiUploadAudioFromUrl, jdiCreateCampaign } from "@/lib/jdi";
 
 export const runtime = "nodejs";
-const BASE = "https://keywordcalls.com";
 
-// Leave the demo voicemail on the entered numbers — FROM the locked demo number (never 1-800-MEDIGAP).
+// Leave the demo voicemail — TRUE RINGLESS via JDI (no ring), scrubbed against the DNC blacklist.
+// Callbacks still route through our Twilio number (cCallback) so tracking + passthrough stay intact.
 export async function POST(req: NextRequest) {
   const s = await getSession();
   if (!s) return NextResponse.json({ error: "Sign in." }, { status: 401 });
+  if (!(await jdiConfigured())) return NextResponse.json({ error: "Ringless (JDI) not configured yet." }, { status: 400 });
+
   const { numbers } = (await req.json().catch(() => ({}))) as { numbers?: unknown };
-  const cfg = await getSettings(["demoAudioUrl", "demoNumber"]);
+  const cfg = await getSettings(["demoAudioUrl", "demoNumber", "demoJdiWav", "demoJdiWavSrc"]);
   if (!cfg.demoAudioUrl) return NextResponse.json({ error: "Record a voicemail first." }, { status: 400 });
   if (!cfg.demoNumber) return NextResponse.json({ error: "Get a demo call-back number first." }, { status: 400 });
-  const tw = await getTwilioCfg();
-  if (!tw) return NextResponse.json({ error: "Telephony not configured." }, { status: 400 });
 
-  const list = String(numbers || "").split(/[\n,;]+/).map((x) => x.replace(/[^\d+]/g, "")).filter((x) => x.replace(/\D/g, "").length >= 10).slice(0, 50);
+  const list = String(numbers || "").split(/[\n,;]+/).map((x) => x.replace(/[^\d]/g, "")).filter((x) => x.length >= 10).slice(0, 50);
   if (!list.length) return NextResponse.json({ error: "Add at least one phone number." }, { status: 400 });
 
-  // Voicemail-ONLY: Twilio detects the machine and only plays after the beep. Human → hang up.
-  // The real outcome (voicemail left vs not connected) is logged by /api/demo/status.
-  let placed = 0;
-  for (const n of list) {
-    const r = await placeCallTwiml(n, `${BASE}/api/demo/drop-twiml`, cfg.demoNumber, tw, { amd: true, statusCallback: `${BASE}/api/demo/status?to=${encodeURIComponent(n)}` });
-    if (r.ok) placed++;
-    // Persist to the ongoing "Demoed" list with any appended data we have.
-    const digits = n.replace(/\D/g, "").slice(-10);
-    const c = digits ? await db.listContact.findFirst({ where: { OR: [{ phone: { contains: digits } }, { altPhones: { contains: digits } }] } }).catch(() => null) : null;
-    const appended = c ? { name: `${c.firstName} ${c.lastName}`.trim(), email: c.email, city: c.city, state: c.state, zip: c.zip } : {};
-    await db.demoContact.upsert({
-      where: { phone: n },
-      update: { timesDemoed: { increment: 1 }, lastDemoedAt: new Date(), ...appended },
-      create: { phone: n, ...appended },
-    }).catch(() => {});
+  // 1) DNC scrub
+  const { kept, removed } = await jdiScrub(list);
+  if (!kept.length) return NextResponse.json({ error: "All numbers are on the DNC blacklist — nothing to send." }, { status: 400 });
+
+  // 2) Ensure our recording is in JDI's audio library (cache by source URL)
+  let wav = cfg.demoJdiWav;
+  if (!wav || cfg.demoJdiWavSrc !== cfg.demoAudioUrl) {
+    wav = (await jdiUploadAudioFromUrl(cfg.demoAudioUrl)) || "";
+    if (wav) { await setSetting("demoJdiWav", wav); await setSetting("demoJdiWavSrc", cfg.demoAudioUrl); }
   }
-  return NextResponse.json({ ok: true, placed, attempted: list.length });
+  if (!wav) return NextResponse.json({ error: "Could not load the recording into the ringless system." }, { status: 502 });
+
+  // 3) Create the ringless campaign (auto-start, high throttle for a live demo)
+  const r = await jdiCreateCampaign({
+    name: `KWC Demo ${Date.now().toString().slice(-6)}`,
+    wavUrl: wav, callback: cfg.demoNumber.replace(/\D/g, ""), numbers: kept,
+    throttle: 500, autoStart: true, timezone: "America/Chicago",
+  });
+  if (!r.ok) return NextResponse.json({ error: r.error || "Ringless campaign failed." }, { status: 502 });
+
+  // 4) Log to the live board + the persistent Demoed list
+  for (const n of kept) {
+    const e164 = "+1" + n.slice(-10);
+    await db.demoEvent.create({ data: { kind: "drop", phone: e164, note: "ringless voicemail sent" } }).catch(() => {});
+    const c = await db.listContact.findFirst({ where: { OR: [{ phone: { contains: n.slice(-10) } }, { altPhones: { contains: n.slice(-10) } }] } }).catch(() => null);
+    const appended = c ? { name: `${c.firstName} ${c.lastName}`.trim(), email: c.email, city: c.city, state: c.state, zip: c.zip } : {};
+    await db.demoContact.upsert({ where: { phone: e164 }, update: { timesDemoed: { increment: 1 }, lastDemoedAt: new Date(), ...appended }, create: { phone: e164, ...appended } }).catch(() => {});
+  }
+
+  return NextResponse.json({ ok: true, placed: kept.length, scrubbed: removed.length, campaignId: r.campaignId });
 }
