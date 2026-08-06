@@ -27,8 +27,8 @@ export async function POST(req: NextRequest) {
   const digits = from.replace(/\D/g, "").slice(-10);
   const ct = digits ? await db.listContact.findFirst({ where: { OR: [{ phone: { contains: digits } }, { altPhones: { contains: digits } }] } }).catch(() => null) : null;
   const cb = await db.campaignCallback.create({ data: { campaignId: c.id, phone: from, name: ct ? `${ct.firstName} ${ct.lastName}`.trim() : "", email: ct?.email || "", city: ct?.city || "", state: ct?.state || "", landedAt: dest || "" } }).catch(() => null);
-  // Flip the matching sent-target "green" on the rollout console.
-  if (digits) await db.rolloutTarget.updateMany({ where: { campaignId: c.id, phone: { contains: digits } }, data: { calledBack: true, calledBackAt: new Date() } }).catch(() => {});
+  // Flip the matching sent-target "green" on the rollout console, recording where it routed.
+  if (digits) await db.rolloutTarget.updateMany({ where: { campaignId: c.id, phone: { contains: digits } }, data: { calledBack: true, calledBackAt: new Date(), landedAt: dest || "" } }).catch(() => {});
 
   if (campaignOpen(c) && dest && dest.length >= 11) {
     // In hours → connect the live callback to the owner (real caller shown). The Dial `action` posts

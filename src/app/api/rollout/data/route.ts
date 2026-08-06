@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     db.rolloutTarget.count({ where: { campaignId: c.id, billable: true } }),
     db.rolloutTarget.count({ where: { campaignId: c.id } }),
   ]);
-  const targets = [...green, ...recent].map((t) => ({ phone: t.phone, name: t.name, email: t.email, city: t.city, state: t.state, calledBack: t.calledBack, calledBackAt: t.calledBackAt, connectSec: t.connectSec, billable: t.billable }));
+  const targets = [...green, ...recent].map((t) => ({ phone: t.phone, name: t.name, email: t.email, city: t.city, state: t.state, calledBack: t.calledBack, calledBackAt: t.calledBackAt, landedAt: t.landedAt, connectSec: t.connectSec, billable: t.billable, sentAt: t.at }));
 
   // Live delivery funnel across this campaign's rollout batches (best-effort, from JDI).
   let delivered = 0, filtered = 0, loaded = 0, undelivered = 0, inQueue = 0, processing = false;
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
   const sent = batches.reduce((a, b) => a + b.size, 0);
   return NextResponse.json({
     ok: true,
-    campaign: { id: c.id, name: c.name, hasAudio: !!c.outboundAudioUrl, campaignNumber: c.campaignNumber, listCount, sentTotal: sent, remaining: Math.max(0, listCount - sent) },
+    campaign: { id: c.id, name: c.name, hasAudio: !!c.outboundAudioUrl, campaignNumber: c.campaignNumber, routingNumber: c.routingNumber, listCount, sentTotal: sent, remaining: Math.max(0, listCount - sent) },
     delivered, filtered, loaded, undelivered, inQueue, processing, sentCount, calledBackCount, billableCount,
     batches: batches.map((b) => ({ id: b.id, label: b.label, size: b.size, throttle: b.throttle, launchedAt: b.launchedAt })),
     targets,

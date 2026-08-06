@@ -224,9 +224,10 @@ model RolloutTarget {
   state        String    @default("")
   calledBack   Boolean   @default(false)
   calledBackAt DateTime?
+  landedAt     String    @default("") // number the callback was routed to
   connectSec   Int       @default(0)
   billable     Boolean   @default(false)
-  at           DateTime  @default(now())
+  at           DateTime  @default(now()) // when it was sent (batch launch)
   @@index([campaignId, calledBack])
   @@index([campaignId, phone])
   @@map("rollout_target")

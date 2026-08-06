@@ -3,10 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import RecordButton from "@/components/RecordButton";
 
 type CB = { phone: string; name: string; email: string; city: string; state: string; landedAt: string; connectSec: number; billable: boolean; at: string };
-type Target = { phone: string; name: string; email: string; city: string; state: string; calledBack: boolean; calledBackAt: string | null; connectSec: number; billable: boolean };
+type Target = { phone: string; name: string; email: string; city: string; state: string; calledBack: boolean; calledBackAt: string | null; landedAt: string; connectSec: number; billable: boolean; sentAt: string };
 type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string };
 type Data = {
-  campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; listCount: number; sentTotal: number; remaining: number } | null;
+  campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; routingNumber: string; listCount: number; sentTotal: number; remaining: number } | null;
   delivered: number; filtered: number; loaded: number; undelivered: number; inQueue: number; processing: boolean; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
 };
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -21,9 +21,17 @@ export default function RolloutConsole() {
   const [customAmt, setCustomAmt] = useState("1000");
   const [customThr, setCustomThr] = useState("1000");
   const [sel, setSel] = useState<Target | null>(null);
+  const [routeNum, setRouteNum] = useState("");
+  const [routeSaved, setRouteSaved] = useState(false);
 
   async function load() { const r = await fetch("/api/rollout/data"); if (r.ok) setD(await r.json()); }
   useEffect(() => { load(); const id = setInterval(load, 5000); return () => clearInterval(id); }, []);
+  useEffect(() => { if (d?.campaign?.routingNumber && !routeNum) setRouteNum(d.campaign.routingNumber); }, [d]); // eslint-disable-line
+  async function saveRoute() {
+    if (!d?.campaign) return;
+    const r = await fetch("/api/rollout/routing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ campaignId: d.campaign.id, number: routeNum }) });
+    setRouteSaved(r.ok);
+  }
 
   async function launch(size: number, throttle: number, label: string) {
     if (!d?.campaign) return;
@@ -65,6 +73,14 @@ export default function RolloutConsole() {
   const cumMax = Math.max(1, callbacks);
   const cumSpanH = Math.max(1, cum.length ? cum[cum.length - 1].t : 1);
 
+  // Response time = how long after we sent the voicemail they called back.
+  const fmtWait = (ms: number) => { const m = Math.round(ms / 60000); return m < 1 ? "<1m" : m < 60 ? `${m}m` : `${(m / 60).toFixed(1)}h`; };
+  const waits = (d?.targets || []).filter((t) => t.calledBack && t.calledBackAt).map((t) => new Date(t.calledBackAt as string).getTime() - new Date(t.sentAt).getTime()).filter((w) => w >= 0);
+  const avgWait = waits.length ? waits.reduce((a, b) => a + b, 0) / waits.length : 0;
+  const quickN = waits.filter((w) => w < HOUR).length;
+  const midN = waits.filter((w) => w >= HOUR && w < 8 * HOUR).length;
+  const longN = waits.filter((w) => w >= 8 * HOUR).length;
+
   return (
     <div className="space-y-6">
       {/* Record outbound voicemail — right here */}
@@ -100,7 +116,17 @@ export default function RolloutConsole() {
         </div>
 
         {msg && <div className="text-sm text-green-700 mt-2">{msg}</div>}
-        {d?.campaign?.campaignNumber && <div className="text-xs text-[color:var(--muted)] mt-2">Callback number: {d.campaign.campaignNumber}</div>}
+
+        {/* Route callbacks to — without this, callbacks are logged but never land anywhere */}
+        <div className="mt-4 rounded-xl bg-[color:var(--soft)] p-4">
+          <div className="text-sm font-semibold mb-2">📞 Route callbacks to {d?.campaign?.routingNumber ? "" : <span className="text-amber-700">— not set! callbacks won&apos;t land until you add a number</span>}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input className="input !w-48" value={routeNum} onChange={(e) => { setRouteNum(e.target.value); setRouteSaved(false); }} onBlur={saveRoute} placeholder="+1… your phone / call center" />
+            <button className="btn btn-primary !py-2" onClick={saveRoute}>Save</button>
+            {routeSaved && <span className="text-xs text-green-700">✓ callbacks will ring this number</span>}
+          </div>
+          {d?.campaign?.campaignNumber && <div className="text-xs text-[color:var(--muted)] mt-2">Your campaign line (the number people call back): {d.campaign.campaignNumber}</div>}
+        </div>
       </div>
 
       {/* Processing status */}
@@ -164,6 +190,17 @@ export default function RolloutConsole() {
         </div>
       </div>
 
+      {/* Response time reporting */}
+      <div className="card p-6">
+        <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)] mb-3">Response time — how long after the voicemail they call back</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          <div className="rounded-lg bg-[color:var(--soft)] p-3"><div className="text-2xl font-extrabold text-[color:var(--brand2)]">{waits.length ? fmtWait(avgWait) : "—"}</div><div className="text-[11px] uppercase text-[color:var(--muted)]">Avg response</div></div>
+          <div className="rounded-lg bg-[color:var(--soft)] p-3"><div className="text-2xl font-extrabold">{quickN}</div><div className="text-[11px] uppercase text-[color:var(--muted)]">Quick (&lt;1h)</div></div>
+          <div className="rounded-lg bg-[color:var(--soft)] p-3"><div className="text-2xl font-extrabold">{midN}</div><div className="text-[11px] uppercase text-[color:var(--muted)]">Mid (1–8h)</div></div>
+          <div className="rounded-lg bg-[color:var(--soft)] p-3"><div className="text-2xl font-extrabold">{longN}</div><div className="text-[11px] uppercase text-[color:var(--muted)]">Long (8h+)</div></div>
+        </div>
+      </div>
+
       {/* Charts */}
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="card p-6">
@@ -208,19 +245,23 @@ export default function RolloutConsole() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Status</th><th className="py-2 px-4">Name</th><th className="py-2 px-4">Phone</th><th className="py-2 px-4">Location</th><th className="py-2 px-4">Talk time</th><th className="py-2 px-4">When</th></tr></thead>
+            <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Status</th><th className="py-2 px-4">Name</th><th className="py-2 px-4">Phone</th><th className="py-2 px-4">Location</th><th className="py-2 px-4">Landed at</th><th className="py-2 px-4">Talk time</th><th className="py-2 px-4">Response</th><th className="py-2 px-4">When</th></tr></thead>
             <tbody>
-              {(!d?.targets || d.targets.length === 0) && <tr><td colSpan={6} className="py-6 px-4 text-[color:var(--muted)]">Numbers appear here as batches send. They turn green when they call back.</td></tr>}
-              {(d?.targets || []).map((t, i) => (
+              {(!d?.targets || d.targets.length === 0) && <tr><td colSpan={8} className="py-6 px-4 text-[color:var(--muted)]">Numbers appear here as batches send. They turn green when they call back.</td></tr>}
+              {(d?.targets || []).map((t, i) => {
+                const wait = t.calledBack && t.calledBackAt ? new Date(t.calledBackAt).getTime() - new Date(t.sentAt).getTime() : -1;
+                return (
                 <tr key={i} className={`border-b border-[color:var(--line)] last:border-0 ${t.calledBack ? "bg-[#16a34a]/10 cursor-pointer hover:bg-[#16a34a]/20" : ""}`} onClick={t.calledBack ? () => setSel(t) : undefined}>
-                  <td className="py-2 px-4">{t.calledBack ? <span className="rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5">📞 Called back{t.billable ? " · $" : ""}</span> : <span className="text-[color:var(--muted)] text-xs">sent</span>}</td>
+                  <td className="py-2 px-4">{t.calledBack ? <span className="rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5">📞 Called back</span> : <span className="text-[color:var(--muted)] text-xs">sent</span>}</td>
                   <td className="py-2 px-4 font-medium">{t.name || <span className="text-[color:var(--muted)]">unknown</span>}</td>
                   <td className="py-2 px-4">{mask(t.phone)}</td>
                   <td className="py-2 px-4 text-[color:var(--muted)]">{[t.city, t.state].filter(Boolean).join(", ") || "—"}</td>
-                  <td className="py-2 px-4 font-medium">{t.connectSec ? mmss(t.connectSec) : <span className="text-[color:var(--muted)]">—</span>}{t.billable ? <span className="ml-1 text-[10px] text-[color:#16a34a] font-bold">120s+</span> : null}</td>
+                  <td className="py-2 px-4">{t.landedAt ? t.landedAt : t.calledBack ? <span className="text-amber-700 text-xs">no route set</span> : <span className="text-[color:var(--muted)]">—</span>}</td>
+                  <td className="py-2 px-4">{t.connectSec ? <span className={t.connectSec >= 120 ? "text-[color:#16a34a] font-bold" : "text-[color:var(--ink)]"}>{mmss(t.connectSec)}</span> : <span className="text-[color:var(--muted)]">—</span>}</td>
+                  <td className="py-2 px-4 text-[color:var(--muted)]">{wait >= 0 ? fmtWait(wait) : "—"}</td>
                   <td className="py-2 px-4 text-[color:var(--muted)] whitespace-nowrap">{t.calledBackAt ? new Date(t.calledBackAt).toLocaleTimeString() : "—"}</td>
                 </tr>
-              ))}
+              ); })}
             </tbody>
           </table>
         </div>
@@ -232,12 +273,15 @@ export default function RolloutConsole() {
           <div className="card max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3"><div className="text-lg font-bold">{sel.name || "Lead"} {sel.billable && <span className="text-[color:#16a34a] text-sm">· billable</span>}</div><button className="text-[color:var(--muted)] text-xl" onClick={() => setSel(null)}>×</button></div>
             <div className="space-y-1 text-sm">
-              <div><b>Phone:</b> {sel.phone}</div>
+              <div><b>Their phone:</b> {sel.phone}</div>
               {sel.email && <div><b>Email:</b> {sel.email}</div>}
               <div><b>Location:</b> {[sel.city, sel.state].filter(Boolean).join(", ") || "—"}</div>
+              <div className="pt-2 border-t border-[color:var(--line)] mt-2" />
+              <div><b>Voicemail sent:</b> {new Date(sel.sentAt).toLocaleString()}</div>
               <div><b>Called back:</b> {sel.calledBackAt ? new Date(sel.calledBackAt).toLocaleString() : "—"}</div>
-              <div><b>Talk time:</b> {sel.connectSec ? mmss(sel.connectSec) + (sel.billable ? " (billable, 120s+)" : "") : "—"}</div>
-              <div className="mt-3 text-xs text-[color:var(--muted)]">Appended from our data network — this is the high-intent lead who called back.</div>
+              <div><b>Response time:</b> {sel.calledBackAt ? fmtWait(new Date(sel.calledBackAt).getTime() - new Date(sel.sentAt).getTime()) : "—"}</div>
+              <div><b>Landed at (routed to):</b> {sel.landedAt || <span className="text-amber-700">no routing number was set</span>}</div>
+              <div><b>Talk time:</b> {sel.connectSec ? <span className={sel.connectSec >= 120 ? "text-[color:#16a34a] font-bold" : ""}>{mmss(sel.connectSec)}{sel.billable ? " · billable (120s+)" : ""}</span> : "—"}</div>
             </div>
           </div>
         </div>
