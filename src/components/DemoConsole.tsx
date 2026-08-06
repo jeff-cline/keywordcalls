@@ -14,16 +14,10 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
   const pricePerCall = ltvNum / 30;   // fair price per call
   const roas = pricePerCall > 0 ? valuePerCall / pricePerCall : 0; // = 3.0x
 
-  // ---- animated "system is flying" dashboard ----
-  const [outbound, setOutbound] = useState(1_000_000);
-  const [revenue, setRevenue] = useState(25_500_000);
+  // ---- "calls live now" — changes every 10 seconds ----
   const [callsLive, setCallsLive] = useState(66);
   useEffect(() => {
-    const id = setInterval(() => {
-      setOutbound((v) => v + Math.floor(40 + Math.random() * 220));
-      setRevenue((v) => v + Math.floor(600 + Math.random() * 3200));
-      setCallsLive(() => 60 + Math.floor(Math.random() * 14));
-    }, 800);
+    const id = setInterval(() => setCallsLive(() => 58 + Math.floor(Math.random() * 18)), 10_000);
     return () => clearInterval(id);
   }, []);
 
@@ -92,26 +86,25 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
         </div>
       </section>
 
-      {/* FEATURED */}
-      <section className="rounded-3xl bg-[color:var(--brand)] text-white text-center px-6 py-14">
+      {/* FEATURED — orange band, blue "33× more valuable" */}
+      <section className="rounded-3xl bg-[color:#ff7a1a] text-white text-center px-6 py-14">
         <img src="/logo.png" alt="KeywordCalls" className="mx-auto w-[220px] max-w-[70%] h-auto mb-6 brightness-0 invert" />
-        <div className="text-3xl md:text-5xl font-extrabold">Inbound calls are <span className="text-[color:#ff7a1a]">33× more valuable</span><br />than clicks. 🚀</div>
+        <div className="text-3xl md:text-5xl font-extrabold">Inbound calls are <span className="text-[color:var(--brand2)]">33× more valuable</span><br />than clicks. 🚀</div>
       </section>
 
-      {/* FLYING DASHBOARD */}
+      {/* CALLS LIVE NOW */}
       <section>
         <div className="rounded-3xl bg-[#0b1020] text-white p-8 md:p-12">
           <div className="flex items-center justify-between mb-8">
             <div className="text-sm font-bold uppercase tracking-widest text-white/50">Network · live</div>
             <div className="flex items-center gap-2 text-sm text-green-400"><span className="inline-block w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" /> real-time</div>
           </div>
-          <div className="grid gap-6 md:grid-cols-3">
-            <Stat label="Calls live now" value={callsLive.toString()} accent="#ff7a1a" />
-            <Stat label="Outbound connections" value={outbound.toLocaleString()} accent="#2f6bff" />
-            <Stat label="Revenue created" value={money(revenue)} accent="#16d6a5" />
-          </div>
-          <div className="mt-8 h-24 flex items-end gap-1">
-            {Array.from({ length: 48 }).map((_, i) => <div key={i} className="flex-1 rounded-t bg-gradient-to-t from-[#2f6bff]/30 to-[#2f6bff]" style={{ height: `${20 + ((i * 7 + (revenue % 40)) % 80)}%` }} />)}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-8">
+            <img src="/logo.png" alt="KeywordCalls" className="w-[220px] max-w-[70%] h-auto brightness-0 invert" />
+            <div className="text-center">
+              <div className="text-7xl md:text-8xl font-extrabold tabular-nums text-[color:#ff7a1a]">{callsLive}</div>
+              <div className="text-sm uppercase tracking-widest text-white/50 mt-1">Calls live now</div>
+            </div>
           </div>
         </div>
       </section>
@@ -165,11 +158,3 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent: string }) {
-  return (
-    <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-      <div className="text-xs uppercase tracking-widest text-white/50">{label}</div>
-      <div className="mt-2 text-4xl md:text-5xl font-extrabold tabular-nums" style={{ color: accent }}>{value}</div>
-    </div>
-  );
-}
