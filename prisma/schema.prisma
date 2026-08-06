@@ -159,6 +159,11 @@ model OutreachCampaign {
   campaignNumber    String    @default("") // this campaign's own caller-ID / callback number
   campaignNumberSid String    @default("")
   cursor            String    @default("") // last processed ListContact id (paced runner)
+  jdiWav            String    @default("") // recording uploaded to JDI (ringless audio URL)
+  jdiCampaignIds    String    @default("[]") // JSON array of JDI ringless campaign ids
+  jdiDone           Boolean   @default(false) // voice list fully handed to JDI
+  emailCursor       String    @default("") // last ListContact id emailed (paced email)
+  emailDone         Boolean   @default(false)
   startedAt         DateTime? // when the campaign was last turned on
   finishedAt        DateTime? // when it completed its full list
   createdAt         DateTime  @default(now())

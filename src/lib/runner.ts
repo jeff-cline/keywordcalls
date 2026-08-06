@@ -1,13 +1,14 @@
 import { db } from "@/lib/db";
-import { getTwilioCfg, placeCallTwiml } from "@/lib/twilio";
 import { acquireForCampaign } from "@/lib/numbers";
 import { campaignOpen } from "@/lib/outreach";
 import { sendCoreEmail } from "@/lib/core";
+import { jdiConfigured, jdiUploadAudioFromUrl, jdiCreateCampaign } from "@/lib/jdi";
 
-const BASE = "https://keywordcalls.com";
 type Campaign = Awaited<ReturnType<typeof getCampaign>>;
 function getCampaign(id: string) { return db.outreachCampaign.findUnique({ where: { id } }); }
 function parseStates(s: string): string[] { try { const v = JSON.parse(s); return Array.isArray(v) ? v : []; } catch { return []; } }
+function parseIds(s: string): string[] { try { const v = JSON.parse(s); return Array.isArray(v) ? v : []; } catch { return []; } }
+const RUN_DAYS = "1,2,3,4,5"; // Mon–Fri (JDI: 0=Sun)
 
 // Turn an outbound campaign ON: give it its own caller-ID / callback number, then start.
 export async function activateOutbound(campaignId: string): Promise<{ ok: boolean; number?: string; error?: string }> {
@@ -20,7 +21,8 @@ export async function activateOutbound(campaignId: string): Promise<{ ok: boolea
     number = got.number;
     await db.outreachCampaign.update({ where: { id: c.id }, data: { campaignNumber: got.number, campaignNumberSid: got.sid || "" } });
   }
-  await db.outreachCampaign.update({ where: { id: c.id }, data: { status: "on", startedAt: new Date(), finishedAt: null } });
+  // Reset run progress so a re-launch starts fresh.
+  await db.outreachCampaign.update({ where: { id: c.id }, data: { status: "on", startedAt: new Date(), finishedAt: null, jdiDone: false, jdiCampaignIds: "[]", emailCursor: "", emailDone: false } });
   return { ok: true, number };
 }
 
@@ -29,57 +31,67 @@ function emailHtml(c: NonNullable<Campaign>, firstName: string): string {
   return `<p>Hi ${firstName || "there"},</p>${body}`;
 }
 
-// Place one voicemail-only drop (AMD) from the campaign's number.
-async function drop(c: NonNullable<Campaign>, ocId: string, phone: string, cfg: { sid: string; token: string }) {
-  const r = await placeCallTwiml(phone, `${BASE}/api/campaigns/drop-twiml?c=${c.id}&type=outbound`, c.campaignNumber, cfg, {
-    amd: true, statusCallback: `${BASE}/api/campaigns/status?oc=${ocId}`,
-  });
-  await db.outreachCall.update({ where: { id: ocId }, data: { voiceDoneAt: new Date() } }).catch(() => {});
-  if (r.ok) await db.outreachCampaign.update({ where: { id: c.id }, data: { dialedCount: { increment: 1 } } }).catch(() => {});
-}
-
-// Advance every ON campaign by one minute's worth of work. Reads each campaign fresh, so edits
-// (states, throttle, mode, messages) and pause take effect on the very next tick.
+// Advance every ON campaign. VOICE → true ringless via JDI (paced by JDI within hours, DNC scrub ON
+// for cold outreach). EMAIL → Zapmail, paced by this cron. Reads each campaign fresh, so edits + pause
+// take effect on the next tick.
 export async function tickCampaigns(now = new Date()): Promise<{ processed: number }> {
   const live = await db.outreachCampaign.findMany({ where: { status: "on" } });
-  const cfg = await getTwilioCfg();
   let processed = 0;
 
   for (const c of live) {
-    if (!campaignOpen(c, now)) continue;             // outside its hours
-    if (!c.listId || !c.campaignNumber || !cfg) continue;
+    if (!campaignOpen(c, now)) continue;
+    if (!c.listId) continue;
+    const states = parseStates(c.states);
+    const stateWhere = states.length ? { state: { in: states } } : {};
     const wantsVoice = c.mode !== "email_only";
     const wantsEmail = c.mode !== "voice_only";
-    if (wantsVoice && !c.outboundAudioUrl) continue; // no recording → can't drop
-    let budget = Math.max(1, c.callsPerMin);         // voice drops this minute
 
-    // 1) Due voice drops (voice_email delay elapsed) first.
-    if (wantsVoice) {
-      const due = await db.outreachCall.findMany({ where: { campaignId: c.id, voiceDoneAt: null, voiceAt: { lte: now } }, take: budget });
-      for (const oc of due) { await drop(c, oc.id, oc.phone, cfg); budget--; processed++; if (budget <= 0) break; }
+    // ---- VOICE: hand the whole eligible list to JDI once (ringless) ----
+    if (wantsVoice && !c.jdiDone) {
+      if (!c.outboundAudioUrl || !c.campaignNumber || !(await jdiConfigured())) {
+        // can't run voice yet — leave jdiDone false so a later tick retries once set up
+      } else {
+        let wav = c.jdiWav;
+        if (!wav) { wav = (await jdiUploadAudioFromUrl(c.outboundAudioUrl)) || ""; if (wav) await db.outreachCampaign.update({ where: { id: c.id }, data: { jdiWav: wav } }); }
+        if (wav) {
+          const contacts = await db.listContact.findMany({ where: { listId: c.listId, ...stateWhere, phone: { not: "" } }, select: { phone: true } });
+          const numbers = [...new Set(contacts.map((x) => x.phone.replace(/\D/g, "")).filter((n) => n.length >= 10))];
+          const CHUNK = 20000;
+          const chunks: string[][] = [];
+          for (let i = 0; i < numbers.length; i += CHUNK) chunks.push(numbers.slice(i, i + CHUNK));
+          const perThrottle = Math.max(1, Math.round((c.callsPerMin * 60) / Math.max(1, chunks.length))); // split rate across chunks
+          const ids = parseIds(c.jdiCampaignIds);
+          for (let i = 0; i < chunks.length; i++) {
+            const r = await jdiCreateCampaign({
+              name: `${c.name.slice(0, 18)} ${i + 1}`, wavUrl: wav, callback: c.campaignNumber.replace(/\D/g, ""), numbers: chunks[i],
+              throttle: perThrottle, startTime: c.hoursStart, stopTime: c.hoursEnd, runDays: RUN_DAYS, timezone: c.tz,
+              stateCheck: true, performance: true, autoStart: true, // DNC / litigator scrub ON for cold outreach
+            });
+            if (r.ok && r.campaignId) ids.push(r.campaignId);
+          }
+          await db.outreachCampaign.update({ where: { id: c.id }, data: { jdiCampaignIds: JSON.stringify(ids), jdiDone: true, dialedCount: numbers.length } });
+          processed += numbers.length;
+        }
+      }
     }
 
-    // 2) Start new contacts (paced by remaining budget), advancing the cursor.
-    if (budget > 0) {
-      const states = parseStates(c.states);
-      const next = await db.listContact.findMany({
-        where: { listId: c.listId, id: { gt: c.cursor }, ...(states.length ? { state: { in: states } } : {}) },
-        orderBy: { id: "asc" }, take: budget,
-      });
-      if (next.length === 0) {
-        const pending = await db.outreachCall.count({ where: { campaignId: c.id, voiceDoneAt: null } });
-        if (pending === 0 && !c.finishedAt) await db.outreachCampaign.update({ where: { id: c.id }, data: { finishedAt: new Date() } }).catch(() => {});
+    // ---- EMAIL: paced Zapmail batches ----
+    if (wantsEmail && !c.emailDone) {
+      const batch = await db.listContact.findMany({ where: { listId: c.listId, id: { gt: c.emailCursor }, ...stateWhere, email: { not: "" } }, orderBy: { id: "asc" }, take: Math.max(1, c.callsPerMin) });
+      if (batch.length === 0) {
+        await db.outreachCampaign.update({ where: { id: c.id }, data: { emailDone: true } });
       } else {
-        for (const ct of next) {
-          const oc = await db.outreachCall.create({ data: { campaignId: c.id, contactId: ct.id, phone: ct.phone } }).catch(() => null);
-          if (!oc) continue;
-          if (wantsEmail && ct.email) { const sent = await sendCoreEmail(ct.email, c.emailSubject || "A quick note from us", emailHtml(c, ct.firstName), "campaign"); if (sent) await db.outreachCall.update({ where: { id: oc.id }, data: { emailSentAt: new Date() } }).catch(() => {}); }
-          if (c.mode === "voice_only") { await drop(c, oc.id, ct.phone, cfg); processed++; }
-          else if (c.mode === "voice_email") { await db.outreachCall.update({ where: { id: oc.id }, data: { voiceAt: new Date(now.getTime() + c.emailDelayMin * 60000) } }).catch(() => {}); }
-          processed++;
-        }
-        await db.outreachCampaign.update({ where: { id: c.id }, data: { cursor: next[next.length - 1].id } }).catch(() => {});
+        for (const ct of batch) await sendCoreEmail(ct.email, c.emailSubject || "A quick note from us", emailHtml(c, ct.firstName), "campaign");
+        await db.outreachCampaign.update({ where: { id: c.id }, data: { emailCursor: batch[batch.length - 1].id } });
+        processed += batch.length;
       }
+    }
+
+    // ---- Finished? ----
+    const voiceComplete = !wantsVoice || c.jdiDone;
+    const emailComplete = !wantsEmail || c.emailDone;
+    if (voiceComplete && emailComplete && !c.finishedAt) {
+      await db.outreachCampaign.update({ where: { id: c.id }, data: { finishedAt: new Date() } }).catch(() => {});
     }
   }
   return { processed };
