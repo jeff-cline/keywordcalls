@@ -225,15 +225,19 @@ model RolloutBatch {
   @@map("rollout_batch")
 }
 
-// Every callback into a campaign's number — timestamped + appended, for the rollout time-series.
+// Every callback into a campaign's number — timestamped + appended, with the connected-leg talk time
+// (the transferred leg after the owner answers). Billable at 120s+. Powers the rollout time-series.
 model CampaignCallback {
   id         String   @id @default(cuid())
   campaignId String
-  phone      String   @default("")
+  phone      String   @default("") // the consumer who called back
   name       String   @default("")
   email      String   @default("")
   city       String   @default("")
   state      String   @default("")
+  landedAt   String   @default("") // the number the call was routed to (campaign owner)
+  connectSec Int      @default(0)  // seconds connected on the transferred leg
+  billable   Boolean  @default(false) // connectSec >= 120
   at         DateTime @default(now())
   @@index([campaignId, at])
   @@map("campaign_callback")

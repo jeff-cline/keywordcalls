@@ -1,12 +1,14 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import RecordButton from "@/components/RecordButton";
 
-type CB = { phone: string; name: string; email: string; city: string; state: string; at: string };
+type CB = { phone: string; name: string; email: string; city: string; state: string; landedAt: string; connectSec: number; billable: boolean; at: string };
 type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string };
 type Data = {
   campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; listCount: number; sentTotal: number; remaining: number } | null;
-  delivered: number; filtered: number; batches: Batch[]; callbacks: CB[];
+  delivered: number; filtered: number; billableCount: number; batches: Batch[]; callbacks: CB[];
 };
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const mask = (n: string) => (n && n.length >= 4 ? `${n.slice(0, -4)}••${n.slice(-2)}` : n || "unknown");
 const HOUR = 3600e3, DAY = 24 * HOUR;
 
@@ -15,9 +17,11 @@ export default function RolloutConsole() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [goal, setGoal] = useState("3");
+  const [customAmt, setCustomAmt] = useState("1000");
+  const [customThr, setCustomThr] = useState("1000");
 
   async function load() { const r = await fetch("/api/rollout/data"); if (r.ok) setD(await r.json()); }
-  useEffect(() => { load(); const id = setInterval(load, 8000); return () => clearInterval(id); }, []);
+  useEffect(() => { load(); const id = setInterval(load, 5000); return () => clearInterval(id); }, []);
 
   async function launch(size: number, throttle: number, label: string) {
     if (!d?.campaign) return;
@@ -39,9 +43,10 @@ export default function RolloutConsole() {
   const sent = d?.campaign?.sentTotal || 0;
   const delivered = d?.delivered || 0;
   const callbacks = cbs.length;
-  const rate = delivered ? callbacks / delivered : 0;       // callbacks per delivered drop
-  const perHour = t0 ? callbacks / elapsedH : 0;
-  const neededSends = rate > 0 ? Math.ceil((parseFloat(goal) || 0) / rate) : 0; // drops to yield goal callbacks
+  const billable = d?.billableCount || 0;
+  const rate = delivered ? billable / delivered : 0;        // BILLABLE calls (120s+) per delivered drop
+  const perHour = t0 ? billable / elapsedH : 0;             // billable calls/hour (the goal metric)
+  const neededSends = rate > 0 ? Math.ceil((parseFloat(goal) || 0) / rate) : 0; // drops to yield goal billable calls
 
   // per-hour buckets since t0 (cap 48 bars)
   const { bars, cum } = useMemo(() => {
@@ -60,27 +65,48 @@ export default function RolloutConsole() {
 
   return (
     <div className="space-y-6">
+      {/* Record outbound voicemail — right here */}
+      {d?.campaign && (
+        <div className="card p-6">
+          <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)] mb-2">Outbound voicemail</div>
+          {d.campaign.hasAudio && <div className="text-sm text-[color:#16a34a] mb-2">✓ Recorded — re-record any time below.</div>}
+          <RecordButton campaignId={d.campaign.id} type="outbound" existingUrl="" label="Record your outbound voicemail" />
+        </div>
+      )}
+
       {/* Launch */}
       <div className="card p-6">
         <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
           <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Launch batches — {d?.campaign?.name || "…"}</div>
           <div className="text-xs text-[color:var(--muted)]">{d?.campaign ? `${sent.toLocaleString()} sent · ${d.campaign.remaining.toLocaleString()} left in list` : ""}</div>
         </div>
-        {!d?.campaign?.hasAudio && <div className="text-sm text-amber-700 mb-3">⚠️ Record the outbound voicemail on this campaign first (Manage → Record).</div>}
-        <div className="flex flex-wrap gap-3">
-          <button className="btn btn-primary" disabled={busy || !d?.campaign?.hasAudio} onClick={() => launch(100, 300, "Batch 1 · 100 / 20 min")}>🚀 Go — Batch 1 (100)</button>
-          <button className="btn btn-primary" disabled={busy || !d?.campaign?.hasAudio} onClick={() => launch(500, 500, "Batch 2 · 500 / hr")}>🚀 Go — Batch 2 (500)</button>
-          <button className="btn !bg-[color:#ff7a1a] text-white !border-0" disabled={busy || !d?.campaign?.hasAudio} onClick={() => launch(1000, 1000, "Batch 3 · 1,000")}>🚀 Go — Batch 3 (1,000)</button>
+        {!d?.campaign?.hasAudio && <div className="text-sm text-amber-700 mb-3">⚠️ Record the outbound voicemail above before launching.</div>}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <button className="btn btn-primary !py-3 text-base" disabled={busy || !d?.campaign?.hasAudio} onClick={() => launch(100, 300, "Batch 1 · 100 / 20 min")}>🚀 Batch 1 (100)</button>
+          <button className="btn btn-primary !py-3 text-base" disabled={busy || !d?.campaign?.hasAudio} onClick={() => launch(500, 500, "Batch 2 · 500 / hr")}>🚀 Batch 2 (500)</button>
+          <button className="btn !bg-[color:#ff7a1a] text-white !border-0 !py-3 text-base" disabled={busy || !d?.campaign?.hasAudio} onClick={() => launch(1000, 1000, "Batch 3 · 1,000")}>🚀 Batch 3 (1,000)</button>
         </div>
+
+        {/* Custom batch — pick any amount of the remaining leads */}
+        <div className="mt-4 rounded-xl bg-[color:var(--soft)] p-4">
+          <div className="text-sm font-semibold mb-2">Custom batch (Batch {(d?.batches.length || 0) + 1}) — {d?.campaign?.remaining.toLocaleString() || 0} leads left</div>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="label">How many to send<input className="input !w-32" value={customAmt} onChange={(e) => setCustomAmt(e.target.value)} placeholder="e.g. 2500" /></label>
+            <label className="label">Per hour (throttle)<input className="input !w-32" value={customThr} onChange={(e) => setCustomThr(e.target.value)} /></label>
+            <button className="btn btn-primary !py-2.5" disabled={busy || !d?.campaign?.hasAudio} onClick={() => { const n = parseInt(customAmt, 10) || 0; if (n > 0) launch(n, parseInt(customThr, 10) || 1000, `Batch ${(d?.batches.length || 0) + 1} · ${n.toLocaleString()}`); }}>🚀 Go — custom</button>
+          </div>
+        </div>
+
         {msg && <div className="text-sm text-green-700 mt-2">{msg}</div>}
         {d?.campaign?.campaignNumber && <div className="text-xs text-[color:var(--muted)] mt-2">Callback number: {d.campaign.campaignNumber}</div>}
       </div>
 
       {/* Headline stats */}
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-5">
         <Stat label="Sent" value={sent.toLocaleString()} />
         <Stat label="Delivered (ringless)" value={delivered.toLocaleString()} sub={d?.filtered ? `${d.filtered.toLocaleString()} DNC-scrubbed` : ""} color="#16a34a" />
         <Stat label="Callbacks" value={callbacks.toLocaleString()} color="#2f6bff" />
+        <Stat label="Billable (120s+)" value={(d?.billableCount || 0).toLocaleString()} sub="counts toward the goal" color="#16a34a" />
         <Stat label="Calls / hour" value={perHour ? perHour.toFixed(1) : "—"} sub={t0 ? `over ${elapsedH.toFixed(1)}h` : ""} color="#ff7a1a" />
       </div>
 
@@ -120,30 +146,32 @@ export default function RolloutConsole() {
       <div className="card p-6">
         <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)] mb-2">Goal → how many to send</div>
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <span>I want</span><input className="input !w-20 !py-1" value={goal} onChange={(e) => setGoal(e.target.value)} /><span>calls / hour.</span>
-          <span className="text-[color:var(--muted)]">Observed callback rate: <b className="text-[color:var(--ink)]">{(rate * 100).toFixed(2)}%</b> of delivered.</span>
+          <span>I want</span><input className="input !w-20 !py-1" value={goal} onChange={(e) => setGoal(e.target.value)} /><span>billable calls (120s+) / hour.</span>
+          <span className="text-[color:var(--muted)]">Observed billable rate: <b className="text-[color:var(--ink)]">{(rate * 100).toFixed(2)}%</b> of delivered.</span>
         </div>
         <div className="mt-3 text-lg">
           {rate > 0
-            ? <>To net <b>{goal}</b> callbacks you need to deliver <b className="text-[color:var(--brand2)]">{neededSends.toLocaleString()}</b> ringless drops. At {perHour.toFixed(1)} calls/hr observed, scale sends proportionally.</>
-            : <span className="text-[color:var(--muted)]">Collecting data — the rate appears once callbacks come in.</span>}
+            ? <>To net <b>{goal}</b> billable calls you need to deliver <b className="text-[color:var(--brand2)]">{neededSends.toLocaleString()}</b> ringless drops. At {perHour.toFixed(1)} billable calls/hr observed, scale sends proportionally.</>
+            : <span className="text-[color:var(--muted)]">Collecting data — the billable rate appears once 120s+ callbacks come in.</span>}
         </div>
       </div>
 
       {/* Live callbacks + append */}
       <div className="card p-0 overflow-hidden">
-        <div className="p-4 text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Callbacks — who called back</div>
+        <div className="p-4 text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Callbacks — who called, where it landed, how long they talked</div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">When</th><th className="py-2 px-4">Name</th><th className="py-2 px-4">Phone</th><th className="py-2 px-4">Location</th></tr></thead>
+            <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">When</th><th className="py-2 px-4">Name</th><th className="py-2 px-4">Caller</th><th className="py-2 px-4">Landed at</th><th className="py-2 px-4">Talk time</th><th className="py-2 px-4">Bill?</th></tr></thead>
             <tbody>
-              {cbs.length === 0 && <tr><td colSpan={4} className="py-6 px-4 text-[color:var(--muted)]">No callbacks yet.</td></tr>}
+              {cbs.length === 0 && <tr><td colSpan={6} className="py-6 px-4 text-[color:var(--muted)]">No callbacks yet.</td></tr>}
               {[...cbs].reverse().slice(0, 100).map((c, i) => (
                 <tr key={i} className="border-b border-[color:var(--line)] last:border-0">
-                  <td className="py-2 px-4 text-[color:var(--muted)] whitespace-nowrap">{new Date(c.at).toLocaleString()}</td>
-                  <td className="py-2 px-4 font-medium">{c.name || <span className="text-[color:var(--muted)]">unknown</span>}</td>
+                  <td className="py-2 px-4 text-[color:var(--muted)] whitespace-nowrap">{new Date(c.at).toLocaleTimeString()}</td>
+                  <td className="py-2 px-4 font-medium">{c.name || <span className="text-[color:var(--muted)]">unknown</span>}{c.state ? <span className="text-[color:var(--muted)] font-normal text-xs"> · {c.state}</span> : null}</td>
                   <td className="py-2 px-4">{mask(c.phone)}</td>
-                  <td className="py-2 px-4 text-[color:var(--muted)]">{[c.city, c.state].filter(Boolean).join(", ") || "—"}</td>
+                  <td className="py-2 px-4 text-[color:var(--muted)]">{c.landedAt || "—"}</td>
+                  <td className="py-2 px-4 font-medium">{c.connectSec ? mmss(c.connectSec) : <span className="text-[color:var(--muted)]">—</span>}</td>
+                  <td className="py-2 px-4">{c.billable ? <span className="rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5">✓ 120s+</span> : c.connectSec ? <span className="text-[color:var(--muted)] text-xs">under 120s</span> : <span className="text-[color:var(--muted)] text-xs">…</span>}</td>
                 </tr>
               ))}
             </tbody>

@@ -20,19 +20,20 @@ export async function POST(req: NextRequest) {
     ? await db.outreachCampaign.findUnique({ where: { id } })
     : await db.outreachCampaign.findFirst({ where: { campaignNumber: to } });
   if (!c) return xml(`<Say voice="Polly.Joanna-Neural">This number is not in service.</Say><Hangup/>`);
-  await db.outreachCampaign.update({ where: { id: c.id }, data: { connectedCount: { increment: 1 }, revenueCents: { increment: c.bidCents } } }).catch(() => {});
-  // Log the callback with any appended data → powers the /rollout time-series + lead identity.
-  (async () => {
-    const digits = from.replace(/\D/g, "").slice(-10);
-    const ct = digits ? await db.listContact.findFirst({ where: { OR: [{ phone: { contains: digits } }, { altPhones: { contains: digits } }] } }).catch(() => null) : null;
-    await db.campaignCallback.create({ data: { campaignId: c.id, phone: from, name: ct ? `${ct.firstName} ${ct.lastName}`.trim() : "", email: ct?.email || "", city: ct?.city || "", state: ct?.state || "" } }).catch(() => {});
-  })().catch(() => {});
+  await db.outreachCampaign.update({ where: { id: c.id }, data: { connectedCount: { increment: 1 } } }).catch(() => {}); // revenue credited only if billable (120s+)
 
+  // Append + create the callback record synchronously so we can attach the duration callback to it.
   const dest = e164(c.routingNumber);
+  const digits = from.replace(/\D/g, "").slice(-10);
+  const ct = digits ? await db.listContact.findFirst({ where: { OR: [{ phone: { contains: digits } }, { altPhones: { contains: digits } }] } }).catch(() => null) : null;
+  const cb = await db.campaignCallback.create({ data: { campaignId: c.id, phone: from, name: ct ? `${ct.firstName} ${ct.lastName}`.trim() : "", email: ct?.email || "", city: ct?.city || "", state: ct?.state || "", landedAt: dest || "" } }).catch(() => null);
+
   if (campaignOpen(c) && dest && dest.length >= 11) {
-    // In hours → connect the live callback straight to the campaign owner, showing the real caller.
+    // In hours → connect the live callback to the owner (real caller shown). The Dial `action` posts
+    // back the transferred-leg talk time → we record connectSec and bill at 120s+.
     const callerAttr = from ? ` callerId="${from}"` : "";
-    return xml(`<Dial${callerAttr} timeout="25"><Number>${dest}</Number></Dial>`);
+    const action = `https://keywordcalls.com/api/campaigns/dial-status?cb=${encodeURIComponent(cb?.id || "")}`;
+    return xml(`<Dial${callerAttr} timeout="25" action="${action}" method="POST"><Number>${dest}</Number></Dial>`);
   }
   // After hours (or no destination set) → play the closed message.
   return xml(`<Say voice="Polly.Joanna-Neural">${esc(c.afterHoursMessage)}</Say><Hangup/>`);

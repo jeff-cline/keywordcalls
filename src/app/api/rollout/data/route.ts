@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
     campaign: { id: c.id, name: c.name, hasAudio: !!c.outboundAudioUrl, campaignNumber: c.campaignNumber, listCount, sentTotal: sent, remaining: Math.max(0, listCount - sent) },
     delivered, filtered,
     batches: batches.map((b) => ({ id: b.id, label: b.label, size: b.size, throttle: b.throttle, launchedAt: b.launchedAt })),
-    callbacks: callbacks.map((cb) => ({ phone: cb.phone, name: cb.name, email: cb.email, city: cb.city, state: cb.state, at: cb.at })),
+    billableCount: callbacks.filter((cb) => cb.billable).length,
+    callbacks: callbacks.map((cb) => ({ phone: cb.phone, name: cb.name, email: cb.email, city: cb.city, state: cb.state, landedAt: cb.landedAt, connectSec: cb.connectSec, billable: cb.billable, at: cb.at })),
   });
 }

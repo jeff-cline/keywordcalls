@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
   if (!mp3) return NextResponse.json({ error: "Could not process the recording." }, { status: 502 });
   const url = await coreUpload(new Blob([new Uint8Array(mp3)], { type: "audio/mpeg" }), `campaign-${campaignId}-${type}.mp3`, `keywordcalls ${type} vm`);
   if (!url) return NextResponse.json({ error: "Upload failed." }, { status: 502 });
-  await db.outreachCampaign.update({ where: { id: campaignId }, data: type === "followup" ? { followupAudioUrl: url } : { outboundAudioUrl: url } });
+  // Re-recording the outbound clears the cached JDI upload so the new audio is used.
+  await db.outreachCampaign.update({ where: { id: campaignId }, data: type === "followup" ? { followupAudioUrl: url } : { outboundAudioUrl: url, jdiWav: "" } });
   return NextResponse.json({ ok: true, url });
 }
