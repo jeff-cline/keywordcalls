@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     name: `KWC Demo ${Date.now().toString().slice(-6)}`,
     wavUrl: wav, callback: cfg.demoNumber.replace(/\D/g, ""), numbers: kept,
     throttle: 500, autoStart: true, timezone: "America/Chicago",
+    performance: false, // demo = consented number you control; skip the DNC scrub so it delivers (cold campaigns keep it ON)
   });
   if (!r.ok) return NextResponse.json({ error: r.error || "Ringless campaign failed." }, { status: 502 });
 

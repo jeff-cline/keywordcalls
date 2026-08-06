@@ -86,14 +86,15 @@ export async function jdiBlacklistAdd(numbers: string[], note = "opt-out"): Prom
 export async function jdiCreateCampaign(opts: {
   name: string; wavUrl: string; callback: string; numbers: string[];
   throttle?: number; startTime?: string; stopTime?: string; runDays?: string; timezone?: string; autoStart?: boolean;
+  stateCheck?: boolean; performance?: boolean;
 }): Promise<{ ok: boolean; campaignId?: string; error?: string }> {
   const body: Record<string, unknown> = {
     cName: opts.name.slice(0, 25) || "KWC Campaign",
     cWav: opts.wavUrl,
     cCallback: opts.callback,
     cNumbers: opts.numbers.map((n) => n.replace(/\D/g, "")).filter(Boolean).join(","), // comma-separated string, not an array
-    cStateCheck: true,   // LRN state/carrier filtering — compliance
-    cPerformance: true,  // skip known-unreceptive destinations
+    cStateCheck: opts.stateCheck !== false,   // LRN state/carrier — wireless-only (RVM requirement)
+    cPerformance: opts.performance !== false,  // DNC / litigator scrub — ON for cold campaigns, OFF for consented demos
     cStart: opts.autoStart !== false,
   };
   if (opts.throttle) body.cThrottle = opts.throttle;
