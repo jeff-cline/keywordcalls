@@ -10,6 +10,9 @@ export async function POST(req: NextRequest) {
   const { campaignId, number } = (await req.json().catch(() => ({}))) as { campaignId?: string; number?: unknown };
   const norm = e164(String(number || ""));
   if (norm.replace(/\D/g, "").length < 11) return NextResponse.json({ error: "Enter a valid 10-digit US number." }, { status: 400 });
-  await db.outreachCampaign.update({ where: { id: String(campaignId || "") }, data: { routingNumber: norm } });
+  // A/B/C/D rollout tests share the callback routing — set it on every rollout group at once.
+  const target = await db.outreachCampaign.findUnique({ where: { id: String(campaignId || "") }, select: { rolloutGroup: true } });
+  if (target?.rolloutGroup) await db.outreachCampaign.updateMany({ where: { rolloutGroup: { not: "" } }, data: { routingNumber: norm } });
+  else await db.outreachCampaign.update({ where: { id: String(campaignId || "") }, data: { routingNumber: norm } });
   return NextResponse.json({ ok: true, number: norm });
 }

@@ -25,6 +25,10 @@ export async function POST(req: NextRequest) {
   const data = type === "followup" ? { followupAudioUrl: url }
     : type === "afterhours" ? { afterHoursAudioUrl: url, afterHoursJdiWav: "" }
     : { outboundAudioUrl: url, jdiWav: "" };
-  await db.outreachCampaign.update({ where: { id: campaignId }, data });
+  // A/B/C/D rollout tests share all settings — only the lead list & tracking number differ.
+  // So a recording on any rollout group applies to every rollout group.
+  const target = await db.outreachCampaign.findUnique({ where: { id: campaignId }, select: { rolloutGroup: true } });
+  if (target?.rolloutGroup) await db.outreachCampaign.updateMany({ where: { rolloutGroup: { not: "" } }, data });
+  else await db.outreachCampaign.update({ where: { id: campaignId }, data });
   return NextResponse.json({ ok: true, url });
 }
