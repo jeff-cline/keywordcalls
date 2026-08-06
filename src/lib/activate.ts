@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
-import { getTwilioCfg, searchNumbers, provisionNumber, areaCodeOf } from "@/lib/twilio";
+import { areaCodeOf } from "@/lib/twilio";
+import { acquireForCampaign } from "@/lib/numbers";
 import { notifyOwner } from "@/lib/notify";
 
 type CustomerWithAccount = Awaited<ReturnType<typeof loadCustomer>>;
@@ -20,23 +21,23 @@ export async function activateCustomer(customerId: string, opts: { notify?: bool
     return { ok: true, number: customer.twilioNumber };
   }
 
-  const cfg = await getTwilioCfg();
-  if (!cfg) return { ok: false, error: "Telephony not configured — add Twilio keys in Integrations first." };
-
+  // Draw from the seasoned-number pool: reuse a number already seasoned for this money word,
+  // otherwise buy a fresh one. Each customer campaign gets its own dedicated number.
   const ac = customer.areaCode || areaCodeOf(customer.account.phone) || areaCodeOf(customer.routingNumber);
-  const nums = await searchNumbers(ac || "", cfg);
-  if (!nums.length) return { ok: false, error: `No numbers available${ac ? ` in area code ${ac}` : ""}.` };
-
-  const bought = await provisionNumber(nums[0], cfg);
-  if (!bought) return { ok: false, error: "Number purchase failed at Twilio." };
+  const moneyWord = parseList(customer.keywords)[0] || "";
+  const got = await acquireForCampaign({
+    moneyWord, areaCode: ac || undefined, customerId,
+    campaignName: `${customer.account.firstName} ${customer.account.lastName}`.trim() || customer.account.email,
+  });
+  if (!got.ok || !got.number) return { ok: false, error: got.error || "Could not get a number." };
 
   const updated = await db.customer.update({
     where: { id: customerId },
-    data: { twilioNumber: bought.number, twilioNumberSid: bought.sid, areaCode: ac || areaCodeOf(bought.number), status: "live" },
+    data: { twilioNumber: got.number, twilioNumberSid: got.sid || "", areaCode: ac || areaCodeOf(got.number), status: "live" },
     include: { account: true },
   });
   if (opts.notify !== false) await fireLive(updated);
-  return { ok: true, number: bought.number };
+  return { ok: true, number: got.number };
 }
 
 async function fireLive(customer: NonNullable<CustomerWithAccount>): Promise<void> {

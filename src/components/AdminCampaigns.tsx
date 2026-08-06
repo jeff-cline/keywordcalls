@@ -18,8 +18,10 @@ type Readiness = {
 const US = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
 const usd = (c: number) => "$" + (c / 100).toLocaleString("en-US", { minimumFractionDigits: 0 });
 
-export default function AdminCampaigns({ lists, rows, readiness }: { lists: ListT[]; rows: Row[]; readiness: Readiness }) {
-  const [tab, setTab] = useState<"current" | "past" | "readiness">("current");
+type NumberRow = { number: string; moneyWord: string; status: string; inUse: boolean; campaignName: string; callsIn: number; callsMonetized: number; createdAt: string };
+
+export default function AdminCampaigns({ lists, rows, readiness, numbers }: { lists: ListT[]; rows: Row[]; readiness: Readiness; numbers: NumberRow[] }) {
+  const [tab, setTab] = useState<"current" | "past" | "readiness" | "numbers">("current");
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<Row | "new" | null>(null);
 
@@ -40,7 +42,7 @@ export default function AdminCampaigns({ lists, rows, readiness }: { lists: List
   return (
     <div className="space-y-6">
       {/* Lists */}
-      <ListsPanel lists={lists} />
+      {(tab === "current" || tab === "past") && <ListsPanel lists={lists} />}
 
       {/* Tabs + search + new */}
       <div className="flex flex-wrap items-center gap-3">
@@ -48,17 +50,19 @@ export default function AdminCampaigns({ lists, rows, readiness }: { lists: List
           <button className={`px-4 py-1.5 text-sm font-medium ${tab === "current" ? "bg-[color:var(--brand)] text-white" : "bg-white"}`} onClick={() => setTab("current")}>Campaigns</button>
           <button className={`px-4 py-1.5 text-sm font-medium ${tab === "past" ? "bg-[color:var(--brand)] text-white" : "bg-white"}`} onClick={() => setTab("past")}>Past campaigns</button>
           <button className={`px-4 py-1.5 text-sm font-medium ${tab === "readiness" ? "bg-[color:var(--brand)] text-white" : "bg-white"}`} onClick={() => setTab("readiness")}>System readiness</button>
+          <button className={`px-4 py-1.5 text-sm font-medium ${tab === "numbers" ? "bg-[color:var(--brand)] text-white" : "bg-white"}`} onClick={() => setTab("numbers")}>Seasoned numbers</button>
         </div>
-        {tab !== "readiness" && <input className="input !py-1.5 flex-1 min-w-[180px]" placeholder="🔎 Search campaigns…" value={q} onChange={(e) => setQ(e.target.value)} />}
-        {tab !== "readiness" && <button className="btn btn-primary" onClick={() => setEditing("new")}>+ New campaign</button>}
+        {(tab === "current" || tab === "past") && <input className="input !py-1.5 flex-1 min-w-[180px]" placeholder="🔎 Search campaigns…" value={q} onChange={(e) => setQ(e.target.value)} />}
+        {(tab === "current" || tab === "past") && <button className="btn btn-primary" onClick={() => setEditing("new")}>+ New campaign</button>}
       </div>
 
       {tab === "readiness" && <ReadinessPanel readiness={readiness} rows={rows} />}
+      {tab === "numbers" && <NumbersPanel numbers={numbers} />}
 
-      {tab !== "readiness" && editing && <CampaignEditor lists={lists} campaign={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
+      {(tab === "current" || tab === "past") && editing && <CampaignEditor lists={lists} campaign={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
 
       {/* Campaigns table */}
-      {tab !== "readiness" && <div className="card p-0 overflow-hidden">
+      {(tab === "current" || tab === "past") && <div className="card p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Campaign</th><th className="py-2 px-4">Revenue</th><th className="py-2 px-4">List</th><th className="py-2 px-4">Dialed</th><th className="py-2 px-4">Started / Finished</th><th className="py-2 px-4">Status</th><th className="py-2 px-4">Actions</th></tr></thead>
@@ -172,6 +176,37 @@ function ReadinessPanel({ readiness: r, rows }: { readiness: Readiness; rows: Ro
           </select>
           <button className="btn btn-primary" disabled={busy || !testId} onClick={test25}>{busy ? "Sending…" : "Send 25 test messages 🚀"}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function NumbersPanel({ numbers }: { numbers: NumberRow[] }) {
+  const inUse = numbers.filter((n) => n.inUse).length;
+  return (
+    <div className="card p-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Seasoned numbers</div>
+        <div className="text-xs text-[color:var(--muted)]">{numbers.length} owned · {inUse} in use · {numbers.length - inUse} available</div>
+      </div>
+      <p className="text-xs text-[color:var(--muted)] mb-3">Every number we buy is kept and seasoned for its money word. When a campaign ends, its number returns to the pool and is reused for that same money word next time — we never lose a seasoned number.</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)]"><th className="py-2 pr-4">Number</th><th className="py-2 pr-4">Money word</th><th className="py-2 pr-4">Calls out</th><th className="py-2 pr-4">Monetized</th><th className="py-2 pr-4">Availability</th><th className="py-2 pr-4">In campaign</th></tr></thead>
+          <tbody>
+            {numbers.length === 0 && <tr><td colSpan={6} className="py-4 text-[color:var(--muted)]">No numbers yet — they appear here as campaigns go live.</td></tr>}
+            {numbers.map((n) => (
+              <tr key={n.number} className="border-b border-[color:var(--line)] last:border-0">
+                <td className="py-2 pr-4 font-medium">{n.number}</td>
+                <td className="py-2 pr-4">{n.moneyWord || <span className="text-[color:var(--muted)]">—</span>}</td>
+                <td className="py-2 pr-4">{n.callsIn.toLocaleString()}</td>
+                <td className="py-2 pr-4">{n.callsMonetized.toLocaleString()}</td>
+                <td className="py-2 pr-4"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${n.inUse ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800"}`}>{n.inUse ? "Not available" : "Available"}</span></td>
+                <td className="py-2 pr-4">{n.inUse ? (n.campaignName || "yes") : <span className="text-[color:var(--muted)]">—</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

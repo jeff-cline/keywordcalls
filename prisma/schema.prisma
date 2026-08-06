@@ -160,6 +160,28 @@ model OutreachCampaign {
   @@map("outreach_campaign")
 }
 
+// Seasoned-number pool. Every number we buy is tracked here, tied to a money word so it can be
+// REUSED for that same money word later. In use → locked to a campaign; released → available again
+// (we never drop the number from Twilio, so its seasoning is never lost).
+model PhoneNumber {
+  id             String    @id @default(cuid())
+  number         String    @unique // E.164
+  sid            String    @default("") // Twilio IncomingPhoneNumber SID
+  moneyWord      String    @default("") // the keyword this number is seasoned for
+  areaCode       String    @default("")
+  status         String    @default("available") // available | in_use
+  customerId     String? // customer campaign it's assigned to
+  campaignId     String? // outbound campaign it's assigned to
+  campaignName   String    @default("") // denormalized for display
+  callsIn        Int       @default(0) // calls delivered on this number
+  callsMonetized Int       @default(0) // billed calls
+  createdAt      DateTime  @default(now())
+  lastUsedAt     DateTime?
+  @@index([moneyWord])
+  @@index([status])
+  @@map("phone_number")
+}
+
 // Live-demo activity feed (voicemails left + real callbacks) for trade-show demos.
 model DemoEvent {
   id        String   @id @default(cuid())

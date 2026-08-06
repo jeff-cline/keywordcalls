@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { e164 } from "@/lib/twilio";
 import { isWithinHours } from "@/lib/hours";
 import { getSetting } from "@/lib/settings";
+import { bumpCallsIn } from "@/lib/numbers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
   if (!dest || dest.length < 11) return xml(`<Say voice="Polly.Joanna-Neural">We're sorry, this line isn't set up yet.</Say><Hangup/>`);
 
   await db.call.create({ data: { customerId: customer.id, callSid, fromNumber: from, toNumber: to, keyword, status: "in-progress" } }).catch(() => {});
+  await bumpCallsIn(to); // seasoned-number stats
   const action = `${BASE}/api/calls/dial-status?sid=${encodeURIComponent(callSid)}&bid=${bidCents}`;
   // CALLER-ID PASSTHROUGH — the buyer must see the CONSUMER's real number (from), never our tracking number.
   const callerId = from || to;

@@ -3,6 +3,7 @@ import { getSession, isStaff, hashPassword } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { creditBalance } from "@/lib/money";
 import { activateCustomer } from "@/lib/activate";
+import { releaseByCustomer } from "@/lib/numbers";
 import { pushLeadToCore } from "@/lib/core";
 import { areaCodeOf } from "@/lib/twilio";
 
@@ -97,12 +98,15 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json(r, { status: r.ok ? 200 : 400 });
   }
   if (action === "pause") {
-    await db.customer.update({ where: { id: customer.id }, data: { status: "paused" } });
+    // Paused campaigns aren't in use → free the number back to the pool (kept + seasoned for reuse).
+    await releaseByCustomer(customer.id);
+    await db.customer.update({ where: { id: customer.id }, data: { status: "paused", twilioNumber: "", twilioNumberSid: "" } });
     return NextResponse.json({ ok: true });
   }
   if (action === "resume") {
-    await db.customer.update({ where: { id: customer.id }, data: { status: customer.twilioNumber ? "live" : "funded" } });
-    return NextResponse.json({ ok: true });
+    // Reacquire — the pool hands back the same seasoned number for this money word if it's still free.
+    const r = await activateCustomer(customer.id, { notify: false });
+    return NextResponse.json(r, { status: r.ok ? 200 : 400 });
   }
   if (action === "credit") {
     const cents = Math.round(parseFloat(String(b.dollars || "0")) * 100) || 0;

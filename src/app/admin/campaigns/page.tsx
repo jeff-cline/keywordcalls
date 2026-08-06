@@ -14,12 +14,18 @@ export default async function AdminCampaignsPage() {
   if (!s) redirect("/login");
   if (!isStaff(s)) redirect("/dashboard");
 
-  const [lists, campaigns, zap, cfg] = await Promise.all([
+  const [lists, campaigns, zap, cfg, numbers] = await Promise.all([
     db.callList.findMany({ orderBy: { createdAt: "desc" } }),
     db.outreachCampaign.findMany({ orderBy: { createdAt: "desc" }, include: { list: true } }),
     getZapmailStatus(),
     getSettings(["mailboxDailyCap", "callsPerMinDefault", "sendWindowHours"]),
+    db.phoneNumber.findMany({ orderBy: [{ status: "asc" }, { createdAt: "desc" }] }),
   ]);
+  const numberRows = numbers.map((n) => ({
+    number: n.number, moneyWord: n.moneyWord, status: n.status,
+    inUse: n.status === "in_use", campaignName: n.campaignName,
+    callsIn: n.callsIn, callsMonetized: n.callsMonetized, createdAt: n.createdAt.toISOString(),
+  }));
   const mailboxDailyCap = parseInt(cfg.mailboxDailyCap || "40", 10);
   const sendWindowHours = parseFloat(cfg.sendWindowHours || "8.5");
   const readiness = {
@@ -57,7 +63,7 @@ export default async function AdminCampaignsPage() {
           <h1 className="text-2xl font-bold">Outbound campaigns</h1>
           <a href="/demo" className="btn !bg-[color:#ff7a1a] text-white !border-0">🚀 DEMO</a>
         </div>
-        <AdminCampaigns lists={lists.map((l) => ({ id: l.id, name: l.name, rowCount: l.rowCount, createdAt: l.createdAt.toISOString() }))} rows={rows} readiness={readiness} />
+        <AdminCampaigns lists={lists.map((l) => ({ id: l.id, name: l.name, rowCount: l.rowCount, createdAt: l.createdAt.toISOString() }))} rows={rows} readiness={readiness} numbers={numberRows} />
       </main>
     </div>
   );

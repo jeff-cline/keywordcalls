@@ -5,6 +5,7 @@ import { getSetting } from "@/lib/settings";
 import { getTwilioCfg, callPriceCents } from "@/lib/twilio";
 import { pushLeadToCore } from "@/lib/core";
 import { checkLowBalance } from "@/lib/lowbalance";
+import { bumpMonetized } from "@/lib/numbers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
       if (!already) { data.billed = true; data.chargedCents = bid; }
     }
     await db.call.update({ where: { id: call.id }, data }).catch(() => {});
-    if (data.billed) await checkLowBalance(call.customerId).catch(() => {}); // warn if now < 3 calls of headroom
+    if (data.billed) { await bumpMonetized(call.toNumber).catch(() => {}); await checkLowBalance(call.customerId).catch(() => {}); }
 
     // best-effort: real Twilio cost + Core data-append on the caller (God-only visibility)
     (async () => {

@@ -127,10 +127,10 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
             </div>
             {msg && <div className="text-sm text-green-300">{msg}</div>}
             <div className="rounded-xl bg-white/5 border border-white/10 p-4">
-              <div className="text-sm text-white/60">Have people call back:</div>
+              <div className="text-sm text-white/60">Real-time number acquired:</div>
               {demoNumber
                 ? <div className="text-2xl font-extrabold tracking-wide">{demoNumber}</div>
-                : <button className="btn btn-primary mt-1" disabled={busy} onClick={getNumber}>Get a demo call-back number</button>}
+                : <button className="btn btn-primary mt-1" disabled={busy} onClick={getNumber}>Acquire real-time number</button>}
             </div>
           </div>
 
