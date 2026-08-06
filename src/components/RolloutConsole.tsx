@@ -27,20 +27,26 @@ export default function RolloutConsole() {
   const [tab, setTab] = useState<string>("");            // "" = default (group A), "combined", or a campaignId
   const [showAllSent, setShowAllSent] = useState(false); // sent (not-yet-called-back) rows past the first 10
   const [addBusy, setAddBusy] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);         // the "name your test + pick file" dialog
+  const [addName, setAddName] = useState("");
+  const [addFile, setAddFile] = useState<File | null>(null);
 
   const tabQuery = tab === "combined" ? "?combined=1" : tab ? `?campaignId=${encodeURIComponent(tab)}` : "";
   async function load() { const r = await fetch("/api/rollout/data" + tabQuery); if (r.ok) setD(await r.json()); }
   useEffect(() => { load(); const id = setInterval(load, 5000); return () => clearInterval(id); }, [tab]); // eslint-disable-line
 
-  // Add a new lead-set test: upload a CSV → clones the current settings into a new A/B/C/D campaign.
-  async function addTest(file: File) {
+  // Add a new lead-set test: name it + upload a CSV → clones the current settings into a new A/B/C/D campaign.
+  async function addTest() {
+    if (!addFile || !addName.trim()) return;
     setAddBusy(true); setMsg(null);
-    const fd = new FormData(); fd.append("file", file);
+    const fd = new FormData(); fd.append("file", addFile); fd.append("name", addName.trim());
     const r = await fetch("/api/rollout/addtest", { method: "POST", body: fd });
     const j = await r.json().catch(() => ({}));
     setAddBusy(false);
-    if (r.ok) { setMsg(`✓ Test ${j.group} created — ${j.count?.toLocaleString()} leads. Switch to its tab to launch.`); setTab(j.campaignId); load(); }
-    else setMsg(j.error || "Could not add test.");
+    if (r.ok) {
+      setMsg(`✓ Test ${j.group} “${j.name}” created — ${j.count?.toLocaleString()} leads. Switch to its tab to launch.`);
+      setAddOpen(false); setAddName(""); setAddFile(null); setTab(j.campaignId); load();
+    } else setMsg(j.error || (r.status === 413 ? "That file is too large to upload." : "Could not add test."));
   }
   const isCombined = !!d?.campaign?.combined;
   useEffect(() => { if (d?.campaign?.routingNumber && !routeNum) setRouteNum(d.campaign.routingNumber); }, [d]); // eslint-disable-line
@@ -101,7 +107,12 @@ export default function RolloutConsole() {
 
   // Lead-set tabs: Original (A), then B/C/D tests, then All Combined. Green "Add Test" uploads a new list.
   const tests = d?.tests || [];
-  const groupLabel = (g: string) => (g === "A" ? "Original (A)" : `${g} Test`);
+  const groupLabel = (g: string, name?: string) => {
+    if (g === "A") return "Original (A)";
+    // name is stored as "B · MyTest" — strip the redundant "B · " prefix if present
+    const clean = (name || "").replace(new RegExp(`^${g}\\s·\\s`), "").trim();
+    return clean ? `${g} · ${clean}` : `${g} Test`;
+  };
   const activeId = isCombined ? "combined" : d?.campaign?.id || "";
 
   return (
@@ -112,15 +123,12 @@ export default function RolloutConsole() {
           {tests.map((t) => (
             <button key={t.id} onClick={() => { setTab(t.rolloutGroup === "A" ? "" : t.id); setShowAllSent(false); }}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeId === t.id ? "bg-[color:var(--brand2)] text-white" : "bg-[color:var(--soft)] text-[color:var(--ink)]"}`}
-              title={t.name}>{groupLabel(t.rolloutGroup)}</button>
+              title={t.name}>{groupLabel(t.rolloutGroup, t.name)}</button>
           ))}
           <button onClick={() => { setTab("combined"); setShowAllSent(false); }}
             className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${isCombined ? "bg-[color:var(--brand2)] text-white" : "bg-[color:var(--soft)] text-[color:var(--ink)]"}`}>All Combined</button>
           <div className="flex-1" />
-          <label className={`px-3 py-1.5 rounded-lg text-sm font-semibold cursor-pointer text-white ${addBusy ? "bg-gray-400" : "bg-[#16a34a] hover:bg-[#15803d]"}`}>
-            {addBusy ? "Uploading…" : "＋ Add Test"}
-            <input type="file" accept=".csv,text/csv" className="hidden" disabled={addBusy} onChange={(e) => { const f = e.target.files?.[0]; if (f) addTest(f); e.target.value = ""; }} />
-          </label>
+          <button onClick={() => { setAddOpen(true); setMsg(null); }} className="px-3 py-1.5 rounded-lg text-sm font-semibold cursor-pointer text-white bg-[#16a34a] hover:bg-[#15803d]">＋ Add Test</button>
         </div>
         <div className="text-[11px] text-[color:var(--muted)] mt-2">Each test is a separate lead file run with these exact settings — compare which list performs best. “All Combined” totals every test together.</div>
       </div>
@@ -337,6 +345,29 @@ export default function RolloutConsole() {
           </table>
         </div>
       </div>
+
+      {/* Add Test dialog — name it, then pick the lead file */}
+      {addOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => !addBusy && setAddOpen(false)}>
+          <div className="card max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4"><div className="text-lg font-bold">Add a lead-set test</div><button className="text-[color:var(--muted)] text-xl" onClick={() => !addBusy && setAddOpen(false)}>×</button></div>
+            <div className="space-y-4">
+              <label className="label block">Name this test
+                <input className="input w-full mt-1" value={addName} onChange={(e) => setAddName(e.target.value)} placeholder="e.g. TX seniors — vendor B" autoFocus />
+              </label>
+              <label className="label block">Lead file (CSV)
+                <input type="file" accept=".csv,text/csv" className="mt-1 block w-full text-sm" onChange={(e) => setAddFile(e.target.files?.[0] || null)} />
+                {addFile && <span className="text-xs text-[color:var(--muted)]">{addFile.name} · {(addFile.size / 1e6).toFixed(1)} MB</span>}
+              </label>
+              <div className="text-[11px] text-[color:var(--muted)]">Runs with these exact settings (states, bid, hours, recording, callback number). Needs a phone column (personal_phone / mobile_phone / direct_number).</div>
+              <div className="flex justify-end gap-2">
+                <button className="btn" onClick={() => setAddOpen(false)} disabled={addBusy}>Cancel</button>
+                <button className="btn btn-primary" onClick={addTest} disabled={addBusy || !addFile || !addName.trim()}>{addBusy ? "Uploading…" : "Create test"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Append modal */}
       {sel && (

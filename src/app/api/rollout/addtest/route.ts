@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
   const form = await req.formData().catch(() => null);
   const file = form?.get("file") as File | null;
   if (!file) return NextResponse.json({ error: "No file." }, { status: 400 });
+  const givenName = String(form?.get("name") || "").trim().slice(0, 80); // what the user names this test
 
   // Template = the original (group A) or the first campaign.
   const tmpl = (await db.outreachCampaign.findFirst({ where: { rolloutGroup: "A" } })) || (await db.outreachCampaign.findFirst({ orderBy: { createdAt: "asc" } }));
@@ -29,16 +30,17 @@ export async function POST(req: NextRequest) {
   const rows = parseCsv(await file.text());
   const contacts = contactsFromRows(rows);
   if (!contacts.length) return NextResponse.json({ error: "No usable rows (need a phone column)." }, { status: 400 });
-  const list = await db.callList.create({ data: { name: `Test ${group} — ${file.name.replace(/\.csv$/i, "")}`.slice(0, 120), source: file.name, rowCount: contacts.length } });
+  const testName = givenName || file.name.replace(/\.csv$/i, "");
+  const list = await db.callList.create({ data: { name: `${group} · ${testName}`.slice(0, 120), source: file.name, rowCount: contacts.length } });
   for (let i = 0; i < contacts.length; i += 1000) await db.listContact.createMany({ data: contacts.slice(i, i + 1000).map((c) => ({ ...c, listId: list.id })) });
 
   // Clone the template into a new campaign for this group + list.
   const camp = await db.outreachCampaign.create({ data: {
-    name: `Test ${group}`, rolloutGroup: group, listId: list.id,
+    name: testName ? `${group} · ${testName}`.slice(0, 80) : `Test ${group}`, rolloutGroup: group, listId: list.id,
     states: tmpl.states, bidCents: tmpl.bidCents, hoursStart: tmpl.hoursStart, hoursEnd: tmpl.hoursEnd, tz: tmpl.tz,
     mode: tmpl.mode, callsPerMin: tmpl.callsPerMin, emailSubject: tmpl.emailSubject, emailBody: tmpl.emailBody,
     afterHoursMessage: tmpl.afterHoursMessage, followupMessage: tmpl.followupMessage,
     outboundAudioUrl: tmpl.outboundAudioUrl, routingNumber: tmpl.routingNumber, // reuse recording + callback number
   } });
-  return NextResponse.json({ ok: true, campaignId: camp.id, group, count: contacts.length });
+  return NextResponse.json({ ok: true, campaignId: camp.id, group, count: contacts.length, name: testName });
 }
