@@ -53,7 +53,10 @@ export default async function AdminCampaignsPage() {
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-5 py-8">
-        <h1 className="text-2xl font-bold mb-5">Outbound campaigns</h1>
+        <div className="flex items-center justify-between mb-5">
+          <h1 className="text-2xl font-bold">Outbound campaigns</h1>
+          <a href="/demo" className="btn !bg-[color:#ff7a1a] text-white !border-0">🚀 DEMO</a>
+        </div>
         <AdminCampaigns lists={lists.map((l) => ({ id: l.id, name: l.name, rowCount: l.rowCount, createdAt: l.createdAt.toISOString() }))} rows={rows} readiness={readiness} />
       </main>
     </div>

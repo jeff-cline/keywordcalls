@@ -160,6 +160,17 @@ model OutreachCampaign {
   @@map("outreach_campaign")
 }
 
+// Live-demo activity feed (voicemails left + real callbacks) for trade-show demos.
+model DemoEvent {
+  id        String   @id @default(cuid())
+  kind      String   @default("drop") // drop | callback
+  phone     String   @default("")
+  note      String   @default("")
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+  @@map("demo_event")
+}
+
 // Monthly plans (editable prices).
 model Plan {
   id          String   @id @default(cuid())

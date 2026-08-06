@@ -36,8 +36,8 @@ export async function searchNumbers(areaCode: string, cfg: { sid: string; token:
 }
 
 // Buy a number and point its Voice webhook at our inbound handler. Returns { number, sid } or null.
-export async function provisionNumber(phoneNumber: string, cfg: { sid: string; token: string }): Promise<{ number: string; sid: string } | null> {
-  const body = new URLSearchParams({ PhoneNumber: phoneNumber, VoiceUrl: `${BASE_URL}/api/calls/inbound`, VoiceMethod: "POST", StatusCallback: `${BASE_URL}/api/calls/status`, StatusCallbackMethod: "POST" });
+export async function provisionNumber(phoneNumber: string, cfg: { sid: string; token: string }, voicePath = "/api/calls/inbound"): Promise<{ number: string; sid: string } | null> {
+  const body = new URLSearchParams({ PhoneNumber: phoneNumber, VoiceUrl: `${BASE_URL}${voicePath}`, VoiceMethod: "POST", StatusCallback: `${BASE_URL}/api/calls/status`, StatusCallbackMethod: "POST" });
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${cfg.sid}/IncomingPhoneNumbers.json`, {
     method: "POST", headers: { Authorization: auth(cfg), "Content-Type": "application/x-www-form-urlencoded" }, body, signal: AbortSignal.timeout(15000),
   }).catch(() => null);
