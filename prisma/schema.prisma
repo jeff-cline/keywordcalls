@@ -154,10 +154,29 @@ model OutreachCampaign {
   dialedCount       Int       @default(0)
   connectedCount    Int       @default(0)
   revenueCents      Int       @default(0)
+  campaignNumber    String    @default("") // this campaign's own caller-ID / callback number
+  campaignNumberSid String    @default("")
+  cursor            String    @default("") // last processed ListContact id (paced runner)
   startedAt         DateTime? // when the campaign was last turned on
   finishedAt        DateTime? // when it completed its full list
   createdAt         DateTime  @default(now())
   @@map("outreach_campaign")
+}
+
+// One contact worked by a campaign's paced runner (dedup + email→voice scheduling + outcome).
+model OutreachCall {
+  id          String    @id @default(cuid())
+  campaignId  String
+  contactId   String
+  phone       String    @default("")
+  emailSentAt DateTime?
+  voiceAt     DateTime? // scheduled voice-drop time (voice follows email by the delay)
+  voiceDoneAt DateTime?
+  outcome     String    @default("") // vm_left | not_connected
+  createdAt   DateTime  @default(now())
+  @@unique([campaignId, contactId])
+  @@index([campaignId, voiceAt])
+  @@map("outreach_call")
 }
 
 // Seasoned-number pool. Every number we buy is tracked here, tied to a money word so it can be

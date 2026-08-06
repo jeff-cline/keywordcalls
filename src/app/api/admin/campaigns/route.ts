@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { campaignSetup, testDrop, dropTwimlUrl } from "@/lib/outreach";
 import { getSettings } from "@/lib/settings";
 import { sendCoreEmail, coreCall } from "@/lib/core";
+import { activateOutbound } from "@/lib/runner";
 
 export const runtime = "nodejs";
 
@@ -51,9 +52,11 @@ export async function PATCH(req: NextRequest) {
     if (turningOn) {
       const setup = campaignSetup(c);
       if (!setup.ok) return NextResponse.json({ error: `Finish setup first — missing: ${setup.missing.join(", ")}.` }, { status: 400 });
+      const r = await activateOutbound(c.id); // acquires the campaign's own number + starts the paced runner
+      return NextResponse.json(r, { status: r.ok ? 200 : 400 });
     }
-    await db.outreachCampaign.update({ where: { id }, data: turningOn ? { status: "on", startedAt: new Date(), finishedAt: null } : { status: "off" } });
-    return NextResponse.json({ ok: true, status: turningOn ? "on" : "off" });
+    await db.outreachCampaign.update({ where: { id }, data: { status: "off" } });
+    return NextResponse.json({ ok: true, status: "off" });
   }
   if (action === "duplicate") {
     const dup = await db.outreachCampaign.create({ data: {

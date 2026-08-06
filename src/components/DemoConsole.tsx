@@ -59,6 +59,16 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
     poll();
   }
 
+  const [lead, setLead] = useState<{ phone: string; found: boolean; lead?: { name: string; email: string; city: string; state: string; zip: string } } | null>(null);
+  async function openLead(phone: string) {
+    setLead({ phone, found: false });
+    const res = await fetch(`/api/demo/lead?phone=${encodeURIComponent(phone)}`);
+    const j = await res.json().catch(() => null);
+    if (j?.ok) setLead(j);
+  }
+  const lastCallback = events.find((e) => e.kind === "callback");
+  const lastDrop = events.find((e) => e.kind === "drop");
+
   const roiConversions = callbacks; // callbacks are the live leads
   const liveRevenue = roiConversions * valuePerCall;
   const liveSpend = drops * pricePerCall;
@@ -128,15 +138,28 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
             </div>
             {msg && <div className="text-sm text-green-300">{msg}</div>}
             <div className="rounded-xl bg-white/5 border border-white/10 p-4">
-              <div className="text-sm text-white/60">Real-time number acquired:</div>
+              <div className="text-sm font-bold uppercase tracking-wide text-white/50 mb-1">3 · Pick callback number to receive calls</div>
               {demoNumber
                 ? <div className="text-2xl font-extrabold tracking-wide">{demoNumber}</div>
-                : <button className="btn btn-primary mt-1" disabled={busy} onClick={getNumber}>Acquire real-time number</button>}
+                : <button className="btn btn-primary mt-1" disabled={busy} onClick={getNumber}>Acquire callback number</button>}
             </div>
           </div>
 
           {/* Live board */}
           <div className="rounded-2xl bg-black/30 border border-white/10 p-5">
+            {/* Activation success */}
+            <div className={`rounded-xl p-4 mb-4 ${lastCallback ? "bg-[#16d6a5]/15 border border-[#16d6a5]/40" : "bg-white/5 border border-white/10"}`}>
+              <div className="text-xs font-bold uppercase tracking-widest text-white/50 mb-2">Activation</div>
+              <div className="flex items-center gap-2 text-sm flex-wrap">
+                <span className={`flex items-center gap-1 ${lastDrop ? "text-white" : "text-white/40"}`}>📨 Outbound {lastDrop ? "✓" : "—"}</span>
+                <span className="text-white/30">→</span>
+                <span className={`flex items-center gap-1 ${lastCallback ? "text-[#16d6a5]" : "text-white/40"}`}>📞 Inbound {lastCallback ? "✓" : "…"}</span>
+                <span className="text-white/30">→</span>
+                <span className={`font-extrabold ${lastCallback ? "text-[#ff7a1a]" : "text-white/40"}`}>$75 value</span>
+              </div>
+              {lastCallback && <button className="mt-2 text-xs underline text-white/70" onClick={() => openLead(lastCallback.phone)}>See who this lead is →</button>}
+            </div>
+
             <div className="grid grid-cols-4 gap-2 text-center mb-4">
               <div><div className="text-2xl font-extrabold text-[#2f6bff]">{drops}</div><div className="text-[10px] uppercase text-white/50">VMs left</div></div>
               <div><div className="text-2xl font-extrabold text-white/40">{notConnected}</div><div className="text-[10px] uppercase text-white/50">Not conn.</div></div>
@@ -149,10 +172,11 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
                 const label = e.kind === "callback" ? "Callback — live lead!" : e.kind === "notconnected" ? (e.note || "Not connected") : "Voicemail left";
                 const icon = e.kind === "callback" ? "📞" : e.kind === "notconnected" ? "📵" : "📨";
                 const bg = e.kind === "callback" ? "bg-[#16d6a5]/15" : e.kind === "notconnected" ? "bg-white/[0.03] text-white/50" : "bg-white/5";
+                const clickable = e.kind === "callback";
                 return (
-                  <div key={e.id} className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${bg}`}>
+                  <div key={e.id} className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${bg} ${clickable ? "cursor-pointer hover:bg-[#16d6a5]/25" : ""}`} onClick={clickable ? () => openLead(e.phone) : undefined}>
                     <span>{icon}</span>
-                    <span className="flex-1">{label} · {mask(e.phone)}</span>
+                    <span className="flex-1">{label} · {mask(e.phone)}{clickable && <span className="text-[#ff7a1a] font-bold"> · $75</span>}</span>
                     <span className="text-white/40 text-xs">{new Date(e.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
                   </div>
                 );
@@ -161,6 +185,31 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
           </div>
         </div>
       </section>
+
+      {/* Lead-append modal */}
+      {lead && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setLead(null)}>
+          <div className="bg-white rounded-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-lg font-bold">Live lead · <span className="text-[color:#ff7a1a]">$75</span></div>
+              <button className="text-[color:var(--muted)] text-xl" onClick={() => setLead(null)}>×</button>
+            </div>
+            <div className="text-sm text-[color:var(--muted)] mb-3">{lead.phone}</div>
+            {lead.found && lead.lead ? (
+              <div className="space-y-1 text-sm">
+                <div><b>{lead.lead.name || "—"}</b></div>
+                {lead.lead.email && <div>{lead.lead.email}</div>}
+                <div>{[lead.lead.city, lead.lead.state, lead.lead.zip].filter(Boolean).join(", ")}</div>
+                <div className="mt-3 text-xs text-[color:var(--muted)]">Appended from our data network. This is the high-intent lead that just called back.</div>
+              </div>
+            ) : lead.found === false && lead.lead === undefined ? (
+              <div className="text-sm text-[color:var(--muted)]">Looking up…</div>
+            ) : (
+              <div className="text-sm text-[color:var(--muted)]">No appended data on file for this number.</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

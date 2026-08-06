@@ -46,6 +46,16 @@ export async function provisionNumber(phoneNumber: string, cfg: { sid: string; t
   return j?.phone_number && j?.sid ? { number: j.phone_number, sid: j.sid } : null;
 }
 
+// Repoint an existing number's Voice webhook (e.g. when a pooled number is reused by a new campaign).
+export async function updateVoiceUrl(numberSid: string, voicePath: string, cfg: { sid: string; token: string }): Promise<boolean> {
+  if (!numberSid) return false;
+  const body = new URLSearchParams({ VoiceUrl: `${BASE_URL}${voicePath}`, VoiceMethod: "POST" });
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${cfg.sid}/IncomingPhoneNumbers/${numberSid}.json`, {
+    method: "POST", headers: { Authorization: auth(cfg), "Content-Type": "application/x-www-form-urlencoded" }, body, signal: AbortSignal.timeout(12000),
+  }).catch(() => null);
+  return !!res && res.ok;
+}
+
 export async function releaseNumber(numberSid: string, cfg: { sid: string; token: string }): Promise<boolean> {
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${cfg.sid}/IncomingPhoneNumbers/${numberSid}.json`, {
     method: "DELETE", headers: { Authorization: auth(cfg) }, signal: AbortSignal.timeout(12000),

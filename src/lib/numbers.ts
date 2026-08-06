@@ -1,20 +1,24 @@
 import { db } from "@/lib/db";
-import { getTwilioCfg, searchNumbers, provisionNumber, areaCodeOf } from "@/lib/twilio";
+import { getTwilioCfg, searchNumbers, provisionNumber, updateVoiceUrl, areaCodeOf } from "@/lib/twilio";
 
 const norm = (s: string) => (s || "").trim().toLowerCase();
 
 // Get a tracking number for a campaign. Reuses an AVAILABLE number already seasoned for the same
 // money word; otherwise buys a fresh one and seasons it. Never takes an in-use number.
+// voicePath sets where callbacks route (customer inbound vs outbound-campaign inbound).
 export async function acquireForCampaign(input: {
-  moneyWord: string; areaCode?: string; customerId?: string; campaignId?: string; campaignName?: string;
+  moneyWord: string; areaCode?: string; customerId?: string; campaignId?: string; campaignName?: string; voicePath?: string;
 }): Promise<{ ok: boolean; number?: string; sid?: string; reused?: boolean; error?: string }> {
   const moneyWord = norm(input.moneyWord);
+  const voicePath = input.voicePath || "/api/calls/inbound";
 
   // 1) Reuse an available number seasoned for this exact money word (oldest-idle first).
   const reuse = moneyWord
     ? await db.phoneNumber.findFirst({ where: { status: "available", moneyWord }, orderBy: [{ lastUsedAt: "asc" }, { createdAt: "asc" }] })
     : null;
   if (reuse) {
+    const cfg = await getTwilioCfg();
+    if (cfg && reuse.sid) await updateVoiceUrl(reuse.sid, voicePath, cfg).catch(() => {});
     await db.phoneNumber.update({ where: { id: reuse.id }, data: { status: "in_use", customerId: input.customerId ?? null, campaignId: input.campaignId ?? null, campaignName: input.campaignName || "", lastUsedAt: new Date() } });
     return { ok: true, number: reuse.number, sid: reuse.sid, reused: true };
   }
@@ -25,7 +29,7 @@ export async function acquireForCampaign(input: {
   const ac = input.areaCode || "";
   const nums = await searchNumbers(ac, cfg);
   if (!nums.length) return { ok: false, error: `No numbers available${ac ? ` in area code ${ac}` : ""}.` };
-  const bought = await provisionNumber(nums[0], cfg);
+  const bought = await provisionNumber(nums[0], cfg, voicePath);
   if (!bought) return { ok: false, error: "Number purchase failed at Twilio." };
   await db.phoneNumber.create({ data: {
     number: bought.number, sid: bought.sid, moneyWord, areaCode: ac || areaCodeOf(bought.number),
