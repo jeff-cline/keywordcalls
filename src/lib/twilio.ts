@@ -63,8 +63,11 @@ export async function sendSms(to: string, body: string, from: string, cfg: { sid
 }
 
 // Place an outbound call that runs a TwiML URL, from a specific number (our own Twilio account).
-export async function placeCallTwiml(to: string, twimlUrl: string, from: string, cfg: { sid: string; token: string }): Promise<{ ok: boolean; sid?: string; error?: string }> {
+// opts.amd → Answering-Machine Detection (waits for the beep; passes AnsweredBy to the TwiML URL).
+export async function placeCallTwiml(to: string, twimlUrl: string, from: string, cfg: { sid: string; token: string }, opts: { amd?: boolean; statusCallback?: string } = {}): Promise<{ ok: boolean; sid?: string; error?: string }> {
   const b = new URLSearchParams({ To: e164(to), From: e164(from), Url: twimlUrl, Method: "POST" });
+  if (opts.amd) { b.set("MachineDetection", "DetectMessageEnd"); b.set("MachineDetectionTimeout", "30"); }
+  if (opts.statusCallback) { b.set("StatusCallback", opts.statusCallback); b.set("StatusCallbackEvent", "completed"); b.set("StatusCallbackMethod", "POST"); }
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${cfg.sid}/Calls.json`, {
     method: "POST", headers: { Authorization: auth(cfg), "Content-Type": "application/x-www-form-urlencoded" }, body: b, signal: AbortSignal.timeout(12000),
   }).catch(() => null);

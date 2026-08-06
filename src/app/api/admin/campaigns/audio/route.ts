@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, isStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { coreUpload } from "@/lib/core";
+import { convertToMp3 } from "@/lib/audio";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +16,9 @@ export async function POST(req: NextRequest) {
   const campaignId = String(form?.get("campaignId") || "");
   const type = String(form?.get("type") || "outbound") === "followup" ? "followup" : "outbound";
   if (!file || !campaignId) return NextResponse.json({ error: "file and campaignId required." }, { status: 400 });
-  const url = await coreUpload(file, `campaign-${campaignId}-${type}.webm`, `keywordcalls ${type} vm`);
+  const mp3 = await convertToMp3(Buffer.from(await file.arrayBuffer()));
+  if (!mp3) return NextResponse.json({ error: "Could not process the recording." }, { status: 502 });
+  const url = await coreUpload(new Blob([new Uint8Array(mp3)], { type: "audio/mpeg" }), `campaign-${campaignId}-${type}.mp3`, `keywordcalls ${type} vm`);
   if (!url) return NextResponse.json({ error: "Upload failed." }, { status: 502 });
   await db.outreachCampaign.update({ where: { id: campaignId }, data: type === "followup" ? { followupAudioUrl: url } : { outboundAudioUrl: url } });
   return NextResponse.json({ ok: true, url });

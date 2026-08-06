@@ -30,13 +30,14 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
   const [events, setEvents] = useState<Ev[]>([]);
   const [drops, setDrops] = useState(0);
   const [callbacks, setCallbacks] = useState(0);
+  const [notConnected, setNotConnected] = useState(0);
   const feedRef = useRef<HTMLDivElement | null>(null);
 
   async function poll() {
     const res = await fetch("/api/demo/events");
     if (!res.ok) return;
     const j = await res.json();
-    setEvents(j.events || []); setDrops(j.drops || 0); setCallbacks(j.callbacks || 0);
+    setEvents(j.events || []); setDrops(j.drops || 0); setCallbacks(j.callbacks || 0); setNotConnected(j.notConnected || 0);
     if (j.demoNumber) setDemoNumber(j.demoNumber);
     setHasAudio(j.hasAudio);
   }
@@ -54,7 +55,7 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
     const res = await fetch("/api/demo/go", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ numbers }) });
     const j = await res.json().catch(() => ({}));
     setBusy(false);
-    setMsg(res.ok ? `🚀 Left ${j.left} voicemail${j.left === 1 ? "" : "s"} of ${j.attempted}.` : (j.error || "Failed."));
+    setMsg(res.ok ? `🚀 Dialing ${j.placed} number${j.placed === 1 ? "" : "s"} — watch the board for voicemails left vs not connected.` : (j.error || "Failed."));
     poll();
   }
 
@@ -136,20 +137,26 @@ export default function DemoConsole({ initialDemoNumber, initialHasAudio }: { in
 
           {/* Live board */}
           <div className="rounded-2xl bg-black/30 border border-white/10 p-5">
-            <div className="grid grid-cols-3 gap-3 text-center mb-4">
-              <div><div className="text-3xl font-extrabold text-[#2f6bff]">{drops}</div><div className="text-[11px] uppercase text-white/50">VMs left</div></div>
-              <div><div className="text-3xl font-extrabold text-[#16d6a5]">{callbacks}</div><div className="text-[11px] uppercase text-white/50">Callbacks</div></div>
-              <div><div className="text-3xl font-extrabold text-[#ff7a1a]">{liveRoas ? liveRoas.toFixed(1) + "×" : "—"}</div><div className="text-[11px] uppercase text-white/50">Live ROAS</div></div>
+            <div className="grid grid-cols-4 gap-2 text-center mb-4">
+              <div><div className="text-2xl font-extrabold text-[#2f6bff]">{drops}</div><div className="text-[10px] uppercase text-white/50">VMs left</div></div>
+              <div><div className="text-2xl font-extrabold text-white/40">{notConnected}</div><div className="text-[10px] uppercase text-white/50">Not conn.</div></div>
+              <div><div className="text-2xl font-extrabold text-[#16d6a5]">{callbacks}</div><div className="text-[10px] uppercase text-white/50">Callbacks</div></div>
+              <div><div className="text-2xl font-extrabold text-[#ff7a1a]">{liveRoas ? liveRoas.toFixed(1) + "×" : "—"}</div><div className="text-[10px] uppercase text-white/50">Live ROAS</div></div>
             </div>
             <div ref={feedRef} className="space-y-2 max-h-80 overflow-y-auto">
               {events.length === 0 && <div className="text-sm text-white/40 py-8 text-center">Waiting for activity…</div>}
-              {events.map((e) => (
-                <div key={e.id} className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${e.kind === "callback" ? "bg-[#16d6a5]/15" : "bg-white/5"}`}>
-                  <span>{e.kind === "callback" ? "📞" : "📨"}</span>
-                  <span className="flex-1">{e.kind === "callback" ? "Callback — live lead!" : "Voicemail left"} · {mask(e.phone)}</span>
-                  <span className="text-white/40 text-xs">{new Date(e.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
-                </div>
-              ))}
+              {events.map((e) => {
+                const label = e.kind === "callback" ? "Callback — live lead!" : e.kind === "notconnected" ? (e.note || "Not connected") : "Voicemail left";
+                const icon = e.kind === "callback" ? "📞" : e.kind === "notconnected" ? "📵" : "📨";
+                const bg = e.kind === "callback" ? "bg-[#16d6a5]/15" : e.kind === "notconnected" ? "bg-white/[0.03] text-white/50" : "bg-white/5";
+                return (
+                  <div key={e.id} className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${bg}`}>
+                    <span>{icon}</span>
+                    <span className="flex-1">{label} · {mask(e.phone)}</span>
+                    <span className="text-white/40 text-xs">{new Date(e.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { getTwilioCfg, placeCallTwiml } from "@/lib/twilio";
 
@@ -21,10 +20,12 @@ export async function POST(req: NextRequest) {
   const list = String(numbers || "").split(/[\n,;]+/).map((x) => x.replace(/[^\d+]/g, "")).filter((x) => x.replace(/\D/g, "").length >= 10).slice(0, 50);
   if (!list.length) return NextResponse.json({ error: "Add at least one phone number." }, { status: 400 });
 
-  let left = 0;
+  // Voicemail-ONLY: Twilio detects the machine and only plays after the beep. Human → hang up.
+  // The real outcome (voicemail left vs not connected) is logged by /api/demo/status.
+  let placed = 0;
   for (const n of list) {
-    const r = await placeCallTwiml(n, `${BASE}/api/demo/drop-twiml`, cfg.demoNumber, tw);
-    if (r.ok) { left++; await db.demoEvent.create({ data: { kind: "drop", phone: n, note: "voicemail left" } }).catch(() => {}); }
+    const r = await placeCallTwiml(n, `${BASE}/api/demo/drop-twiml`, cfg.demoNumber, tw, { amd: true, statusCallback: `${BASE}/api/demo/status?to=${encodeURIComponent(n)}` });
+    if (r.ok) placed++;
   }
-  return NextResponse.json({ ok: true, left, attempted: list.length });
+  return NextResponse.json({ ok: true, placed, attempted: list.length });
 }
