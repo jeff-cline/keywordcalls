@@ -39,14 +39,16 @@ export async function POST(req: NextRequest) {
   if (!wav) { wav = (await jdiUploadAudioFromUrl(c.outboundAudioUrl)) || ""; if (wav) await db.outreachCampaign.update({ where: { id: c.id }, data: { jdiWav: wav } }); }
   if (!wav) return NextResponse.json({ error: "Could not load the recording into the ringless system." }, { status: 502 });
 
-  // Take the next N eligible contacts.
+  // Take the next N eligible contacts (with their appended data).
   const states = parse(c.states);
   const contacts = await db.listContact.findMany({
     where: { listId: c.listId, id: { gt: c.rolloutCursor }, ...(states.length ? { state: { in: states } } : {}), phone: { not: "" } },
     orderBy: { id: "asc" }, take: size,
   });
   if (contacts.length === 0) return NextResponse.json({ error: "No more contacts left in the list." }, { status: 400 });
-  const numbers = [...new Set(contacts.map((x) => x.phone.replace(/\D/g, "")).filter((n) => n.length >= 10))];
+  const seen = new Set<string>();
+  const targets = contacts.filter((x) => { const n = x.phone.replace(/\D/g, ""); if (n.length < 10 || seen.has(n)) return false; seen.add(n); return true; });
+  const numbers = targets.map((x) => x.phone.replace(/\D/g, ""));
 
   const r = await jdiCreateCampaign({
     name: `${c.name.slice(0, 14)} ${Date.now().toString().slice(-6)}`, wavUrl: wav, callback: campaignNumber.replace(/\D/g, ""), numbers,
@@ -57,5 +59,7 @@ export async function POST(req: NextRequest) {
 
   await db.outreachCampaign.update({ where: { id: c.id }, data: { rolloutCursor: contacts[contacts.length - 1].id, dialedCount: { increment: numbers.length } } });
   const batch = await db.rolloutBatch.create({ data: { campaignId: c.id, label, size: numbers.length, jdiCampaignId: String(r.campaignId || ""), throttle } });
+  // Record every sent number as a target (appended up front) → the console's sent list.
+  await db.rolloutTarget.createMany({ data: targets.map((x) => ({ campaignId: c.id, batchId: batch.id, phone: "+1" + x.phone.replace(/\D/g, "").slice(-10), name: `${x.firstName} ${x.lastName}`.trim(), email: x.email, city: x.city, state: x.state })) });
   return NextResponse.json({ ok: true, sent: numbers.length, batchId: batch.id, jdiCampaignId: r.campaignId });
 }

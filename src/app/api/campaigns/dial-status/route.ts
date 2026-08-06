@@ -15,6 +15,8 @@ export async function POST(req: NextRequest) {
     if (cb && !cb.billable) {
       const billable = dur >= 120;
       await db.campaignCallback.update({ where: { id: cbId }, data: { connectSec: dur, billable } }).catch(() => {});
+      const dg = cb.phone.replace(/\D/g, "").slice(-10);
+      if (dg) await db.rolloutTarget.updateMany({ where: { campaignId: cb.campaignId, phone: { contains: dg } }, data: { connectSec: dur, billable } }).catch(() => {});
       if (billable) {
         const c = await db.outreachCampaign.findUnique({ where: { id: cb.campaignId } }).catch(() => null);
         if (c) await db.outreachCampaign.update({ where: { id: c.id }, data: { revenueCents: { increment: c.bidCents } } }).catch(() => {});

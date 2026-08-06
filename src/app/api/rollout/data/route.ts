@@ -16,11 +16,17 @@ export async function GET(req: NextRequest) {
     : await db.outreachCampaign.findFirst({ orderBy: { createdAt: "asc" } });
   if (!c) return NextResponse.json({ ok: true, campaign: null });
 
-  const [batches, callbacks, listCount] = await Promise.all([
+  const [batches, callbacks, listCount, green, recent, calledBackCount, billableCount, sentCount] = await Promise.all([
     db.rolloutBatch.findMany({ where: { campaignId: c.id }, orderBy: { launchedAt: "asc" } }),
     db.campaignCallback.findMany({ where: { campaignId: c.id }, orderBy: { at: "asc" }, take: 2000 }),
     c.listId ? db.listContact.count({ where: { listId: c.listId } }) : Promise.resolve(0),
+    db.rolloutTarget.findMany({ where: { campaignId: c.id, calledBack: true }, orderBy: { calledBackAt: "desc" }, take: 500 }),
+    db.rolloutTarget.findMany({ where: { campaignId: c.id, calledBack: false }, orderBy: { at: "desc" }, take: 300 }),
+    db.rolloutTarget.count({ where: { campaignId: c.id, calledBack: true } }),
+    db.rolloutTarget.count({ where: { campaignId: c.id, billable: true } }),
+    db.rolloutTarget.count({ where: { campaignId: c.id } }),
   ]);
+  const targets = [...green, ...recent].map((t) => ({ phone: t.phone, name: t.name, email: t.email, city: t.city, state: t.state, calledBack: t.calledBack, calledBackAt: t.calledBackAt, connectSec: t.connectSec, billable: t.billable }));
 
   // Live delivered/filtered across this campaign's rollout batches (best-effort).
   let delivered = 0, filtered = 0;
@@ -30,9 +36,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     campaign: { id: c.id, name: c.name, hasAudio: !!c.outboundAudioUrl, campaignNumber: c.campaignNumber, listCount, sentTotal: sent, remaining: Math.max(0, listCount - sent) },
-    delivered, filtered,
+    delivered, filtered, sentCount, calledBackCount, billableCount,
     batches: batches.map((b) => ({ id: b.id, label: b.label, size: b.size, throttle: b.throttle, launchedAt: b.launchedAt })),
-    billableCount: callbacks.filter((cb) => cb.billable).length,
+    targets,
     callbacks: callbacks.map((cb) => ({ phone: cb.phone, name: cb.name, email: cb.email, city: cb.city, state: cb.state, landedAt: cb.landedAt, connectSec: cb.connectSec, billable: cb.billable, at: cb.at })),
   });
 }

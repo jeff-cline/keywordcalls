@@ -3,10 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import RecordButton from "@/components/RecordButton";
 
 type CB = { phone: string; name: string; email: string; city: string; state: string; landedAt: string; connectSec: number; billable: boolean; at: string };
+type Target = { phone: string; name: string; email: string; city: string; state: string; calledBack: boolean; calledBackAt: string | null; connectSec: number; billable: boolean };
 type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string };
 type Data = {
   campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; listCount: number; sentTotal: number; remaining: number } | null;
-  delivered: number; filtered: number; billableCount: number; batches: Batch[]; callbacks: CB[];
+  delivered: number; filtered: number; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
 };
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const mask = (n: string) => (n && n.length >= 4 ? `${n.slice(0, -4)}••${n.slice(-2)}` : n || "unknown");
@@ -19,6 +20,7 @@ export default function RolloutConsole() {
   const [goal, setGoal] = useState("3");
   const [customAmt, setCustomAmt] = useState("1000");
   const [customThr, setCustomThr] = useState("1000");
+  const [sel, setSel] = useState<Target | null>(null);
 
   async function load() { const r = await fetch("/api/rollout/data"); if (r.ok) setD(await r.json()); }
   useEffect(() => { load(); const id = setInterval(load, 5000); return () => clearInterval(id); }, []);
@@ -42,7 +44,7 @@ export default function RolloutConsole() {
   const win = (ms: number) => (t0 ? cbs.filter((c) => new Date(c.at).getTime() <= t0 + ms).length : 0);
   const sent = d?.campaign?.sentTotal || 0;
   const delivered = d?.delivered || 0;
-  const callbacks = cbs.length;
+  const callbacks = d?.calledBackCount || 0;
   const billable = d?.billableCount || 0;
   const rate = delivered ? billable / delivered : 0;        // BILLABLE calls (120s+) per delivered drop
   const perHour = t0 ? billable / elapsedH : 0;             // billable calls/hour (the goal metric)
@@ -156,28 +158,48 @@ export default function RolloutConsole() {
         </div>
       </div>
 
-      {/* Live callbacks + append */}
+      {/* Sent list — callbacks turn green + pop to top; click a green one for appended data */}
       <div className="card p-0 overflow-hidden">
-        <div className="p-4 text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Callbacks — who called, where it landed, how long they talked</div>
+        <div className="p-4 flex items-center justify-between">
+          <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Sent list — callbacks light up green &amp; pop to the top</div>
+          <div className="text-xs text-[color:var(--muted)]">{(d?.calledBackCount || 0)} of {(d?.sentCount || 0).toLocaleString()} called back</div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">When</th><th className="py-2 px-4">Name</th><th className="py-2 px-4">Caller</th><th className="py-2 px-4">Landed at</th><th className="py-2 px-4">Talk time</th><th className="py-2 px-4">Bill?</th></tr></thead>
+            <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Status</th><th className="py-2 px-4">Name</th><th className="py-2 px-4">Phone</th><th className="py-2 px-4">Location</th><th className="py-2 px-4">Talk time</th><th className="py-2 px-4">When</th></tr></thead>
             <tbody>
-              {cbs.length === 0 && <tr><td colSpan={6} className="py-6 px-4 text-[color:var(--muted)]">No callbacks yet.</td></tr>}
-              {[...cbs].reverse().slice(0, 100).map((c, i) => (
-                <tr key={i} className="border-b border-[color:var(--line)] last:border-0">
-                  <td className="py-2 px-4 text-[color:var(--muted)] whitespace-nowrap">{new Date(c.at).toLocaleTimeString()}</td>
-                  <td className="py-2 px-4 font-medium">{c.name || <span className="text-[color:var(--muted)]">unknown</span>}{c.state ? <span className="text-[color:var(--muted)] font-normal text-xs"> · {c.state}</span> : null}</td>
-                  <td className="py-2 px-4">{mask(c.phone)}</td>
-                  <td className="py-2 px-4 text-[color:var(--muted)]">{c.landedAt || "—"}</td>
-                  <td className="py-2 px-4 font-medium">{c.connectSec ? mmss(c.connectSec) : <span className="text-[color:var(--muted)]">—</span>}</td>
-                  <td className="py-2 px-4">{c.billable ? <span className="rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5">✓ 120s+</span> : c.connectSec ? <span className="text-[color:var(--muted)] text-xs">under 120s</span> : <span className="text-[color:var(--muted)] text-xs">…</span>}</td>
+              {(!d?.targets || d.targets.length === 0) && <tr><td colSpan={6} className="py-6 px-4 text-[color:var(--muted)]">Numbers appear here as batches send. They turn green when they call back.</td></tr>}
+              {(d?.targets || []).map((t, i) => (
+                <tr key={i} className={`border-b border-[color:var(--line)] last:border-0 ${t.calledBack ? "bg-[#16a34a]/10 cursor-pointer hover:bg-[#16a34a]/20" : ""}`} onClick={t.calledBack ? () => setSel(t) : undefined}>
+                  <td className="py-2 px-4">{t.calledBack ? <span className="rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5">📞 Called back{t.billable ? " · $" : ""}</span> : <span className="text-[color:var(--muted)] text-xs">sent</span>}</td>
+                  <td className="py-2 px-4 font-medium">{t.name || <span className="text-[color:var(--muted)]">unknown</span>}</td>
+                  <td className="py-2 px-4">{mask(t.phone)}</td>
+                  <td className="py-2 px-4 text-[color:var(--muted)]">{[t.city, t.state].filter(Boolean).join(", ") || "—"}</td>
+                  <td className="py-2 px-4 font-medium">{t.connectSec ? mmss(t.connectSec) : <span className="text-[color:var(--muted)]">—</span>}{t.billable ? <span className="ml-1 text-[10px] text-[color:#16a34a] font-bold">120s+</span> : null}</td>
+                  <td className="py-2 px-4 text-[color:var(--muted)] whitespace-nowrap">{t.calledBackAt ? new Date(t.calledBackAt).toLocaleTimeString() : "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Append modal */}
+      {sel && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setSel(null)}>
+          <div className="card max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3"><div className="text-lg font-bold">{sel.name || "Lead"} {sel.billable && <span className="text-[color:#16a34a] text-sm">· billable</span>}</div><button className="text-[color:var(--muted)] text-xl" onClick={() => setSel(null)}>×</button></div>
+            <div className="space-y-1 text-sm">
+              <div><b>Phone:</b> {sel.phone}</div>
+              {sel.email && <div><b>Email:</b> {sel.email}</div>}
+              <div><b>Location:</b> {[sel.city, sel.state].filter(Boolean).join(", ") || "—"}</div>
+              <div><b>Called back:</b> {sel.calledBackAt ? new Date(sel.calledBackAt).toLocaleString() : "—"}</div>
+              <div><b>Talk time:</b> {sel.connectSec ? mmss(sel.connectSec) + (sel.billable ? " (billable, 120s+)" : "") : "—"}</div>
+              <div className="mt-3 text-xs text-[color:var(--muted)]">Appended from our data network — this is the high-intent lead who called back.</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

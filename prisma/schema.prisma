@@ -212,6 +212,26 @@ model PhoneNumber {
   @@map("phone_number")
 }
 
+// Every number a rollout batch was sent to — appended up front, flips "green" (calledBack) on callback.
+model RolloutTarget {
+  id           String    @id @default(cuid())
+  campaignId   String
+  batchId      String    @default("")
+  phone        String    @default("")
+  name         String    @default("")
+  email        String    @default("")
+  city         String    @default("")
+  state        String    @default("")
+  calledBack   Boolean   @default(false)
+  calledBackAt DateTime?
+  connectSec   Int       @default(0)
+  billable     Boolean   @default(false)
+  at           DateTime  @default(now())
+  @@index([campaignId, calledBack])
+  @@index([campaignId, phone])
+  @@map("rollout_target")
+}
+
 // A manually-launched rollout batch (100 / 500 / 1,000…) for the /rollout experiment console.
 model RolloutBatch {
   id            String   @id @default(cuid())
