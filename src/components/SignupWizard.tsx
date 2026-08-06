@@ -70,6 +70,7 @@ export default function SignupWizard({ plans, refSlug }: { plans: Plan[]; refSlu
         body: JSON.stringify({ ...a, keywords: kw, bids, geoType, geoStates, geoExcludeStates: geoExclude, geoZips: zips, hours, routingNumber, agreed, ref: refSlug || undefined }),
       });
       const data = await res.json().catch(() => ({}));
+      if (data.existing) { setErr(data.message || "You already have an account — we emailed a password reset. Taking you to login…"); setTimeout(() => router.push(data.redirect || "/login"), 2200); return; }
       if (!res.ok) throw new Error(data.error || "Could not create your account.");
       router.push("/dashboard?welcome=1");
     } catch (e) { setErr(e instanceof Error ? e.message : "Something went wrong."); }

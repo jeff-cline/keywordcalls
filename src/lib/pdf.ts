@@ -4,7 +4,7 @@ import { resultsFor, usd } from "@/lib/results";
 
 // Brand palette lifted from the site's CSS variables.
 const BRAND = "#1b2a8f", BRAND2 = "#2f6bff", ORANGE = "#ff7a1a", INK = "#0f1115", MUTED = "#6b7280", SOFT = "#f4f6ff", LINE = "#e6e8ee", GREEN = "#16a34a";
-const SIGNUP = "https://keywordcalls.com/signup";
+const SITE = "https://keywordcalls.com";
 
 type TestRow = { phone: string; name: string; at: Date };
 const mask = (n: string) => n; // full numbers — this is the operator's own test data
@@ -107,8 +107,8 @@ export async function resultsPdf(opts: { name: string; ltvCents: number; drops: 
   const btnY = Math.min(doc.y + 16, doc.page.height - 108);
   doc.y = btnY;
   const bw = (CW - 14) / 2;
-  button(M, btnY, bw, "Create your account  →", SIGNUP, ORANGE);
-  button(M + bw + 14, btnY, bw, "View your results online", "https://keywordcalls.com/results", BRAND);
+  button(M, btnY, bw, "Visit KeywordCalls.com  →", SITE, ORANGE);
+  button(M + bw + 14, btnY, bw, "View your results online", `${SITE}/results`, BRAND);
   doc.fillColor(MUTED).font("Helvetica").fontSize(8).text("Your first call is free · When you scale, ExitOptimization.com helps you double — even triple — your exit.", M, btnY + 40, { width: CW, align: "center" });
 
   doc.end();
