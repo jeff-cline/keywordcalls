@@ -108,28 +108,41 @@ export default function SignupWizard({ plans, refSlug }: { plans: Plan[]; refSlu
             <div className="space-y-4">
               <h1 className="text-xl font-bold">Build your campaign</h1>
 
+              {/* 1 · Pick keyword */}
               <div>
-                <label className="label">Your keyword(s) — type your money word*</label>
+                <label className="label">1 · Pick your keyword — type your money word*</label>
                 <input className="input" value={kwInput} placeholder="e.g. Heart Insurance, Regenerative Medicine, Roofing…"
                   onChange={(e) => setKwInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); commitKw(kwInput); } }}
                   onBlur={() => commitKw(kwInput)} />
                 <div className="text-xs text-[color:var(--muted)] mt-1">Type a keyword and press Enter. Add as many as you want.</div>
                 {kw.length > 0 && (
-                  <div className="mt-3 space-y-2">
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {kw.map((w) => (
-                      <div key={w} className="flex items-center gap-2 rounded-lg border border-[color:var(--line)] p-2">
-                        <span className="flex-1 text-sm font-medium">{w}</span>
-                        <span className="flex items-center gap-1 text-sm text-[color:var(--muted)]">I&apos;ll pay $<input className="input !py-1 w-24" value={bids[w] ?? ""} onChange={(e) => setBids((p) => ({ ...p, [w]: e.target.value }))} placeholder="per call" />/call</span>
-                        <button type="button" className="text-[color:var(--muted)] text-lg leading-none" onClick={() => removeKw(w)}>×</button>
-                      </div>
+                      <span key={w} className="rounded-full bg-[color:var(--brand)] text-white text-sm font-medium px-3 py-1">{w}<button type="button" className="ml-2" onClick={() => removeKw(w)}>×</button></span>
                     ))}
                   </div>
                 )}
               </div>
 
+              {/* 2 · Pick what you'll pay per call */}
+              {kw.length > 0 && (
+                <div>
+                  <label className="label">2 · Pick what you&apos;re willing to pay per call*</label>
+                  <div className="space-y-2">
+                    {kw.map((w) => (
+                      <div key={w} className="flex items-center gap-2 rounded-lg border border-[color:var(--line)] p-2">
+                        <span className="flex-1 text-sm font-medium">{w}</span>
+                        <span className="flex items-center gap-1 text-sm">$<input className="input !py-1 w-24" value={bids[w] ?? ""} onChange={(e) => setBids((p) => ({ ...p, [w]: e.target.value }))} placeholder="per call" /><span className="text-[color:var(--muted)]">/call</span></span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 3 · Coverage */}
               <div>
-                <label className="label">Coverage</label>
+                <label className="label">3 · Coverage <span className="text-[color:var(--muted)] font-normal">(monthly)</span></label>
                 <div className="flex flex-wrap gap-2">
                   {plans.map((p) => (
                     <button key={p.id} type="button" onClick={() => { setGeoType(p.scope); setGeoStates([]); setGeoExclude([]); }} className={`rounded-lg px-3 py-1.5 text-sm border ${geoType === p.scope ? "bg-[color:var(--brand2)] text-white border-[color:var(--brand2)]" : "border-[color:var(--line)] hover:bg-[color:var(--soft)]"}`}>{p.name} · {usd(p.priceCents)}/mo</button>
@@ -148,13 +161,12 @@ export default function SignupWizard({ plans, refSlug }: { plans: Plan[]; refSlu
                   {zips.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{zips.map((z) => <span key={z} className="rounded-full bg-[color:var(--brand)] text-white text-xs font-semibold px-2.5 py-1">{z}<button type="button" className="ml-1" onClick={() => setZips(zips.filter((x) => x !== z))}>×</button></span>)}</div>}
                 </div>
               )}
-              {(geoType === "statewide" || geoType === "regional") && (
+              {geoType === "statewide" && (
                 <div>
-                  <label className="label">{geoType === "statewide" ? "Pick your state*" : "Pick up to 3 states*"}</label>
+                  <label className="label">Pick your state*</label>
                   <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
                     {US.map((s) => <button key={s} type="button" onClick={() => pickState(s)} className={`rounded px-2 py-1 text-xs border ${geoStates.includes(s) ? "bg-[color:var(--brand)] text-white border-[color:var(--brand)]" : "border-[color:var(--line)]"}`}>{s}</button>)}
                   </div>
-                  {geoType === "regional" && <div className="text-xs text-[color:var(--muted)] mt-1">{geoStates.length}/3 selected</div>}
                 </div>
               )}
               {geoType === "national" && (
@@ -167,8 +179,9 @@ export default function SignupWizard({ plans, refSlug }: { plans: Plan[]; refSlu
                 </div>
               )}
 
+              {/* 4 · Calendar */}
               <div>
-                <label className="label">When do you want to receive calls?</label>
+                <label className="label">4 · When do you want to receive calls?</label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {DAYS.map((d) => <button key={d} type="button" onClick={() => toggle(hours.days, d, (x) => setHours((h) => ({ ...h, days: x })))} className={`rounded px-2.5 py-1 text-xs border ${hours.days.includes(d) ? "bg-[color:var(--brand)] text-white border-[color:var(--brand)]" : "border-[color:var(--line)]"}`}>{d}</button>)}
                 </div>
@@ -178,7 +191,9 @@ export default function SignupWizard({ plans, refSlug }: { plans: Plan[]; refSlu
                   <input className="input !w-auto" type="time" value={hours.end} onChange={(e) => setHours((h) => ({ ...h, end: e.target.value }))} />
                 </div>
               </div>
-              <div><label className="label">Route calls to this number*</label><input className="input" placeholder="(555) 123-4567" value={routingNumber} onChange={(e) => setRouting(e.target.value)} /></div>
+
+              {/* 5 · Route number */}
+              <div><label className="label">5 · Route calls to this number*</label><input className="input" placeholder="(555) 123-4567" value={routingNumber} onChange={(e) => setRouting(e.target.value)} /></div>
               <div className="flex gap-2">
                 <button className="btn btn-ghost flex-1" onClick={() => setStep(1)}>← Back</button>
                 <button className="btn flex-1" onClick={next}>Continue →</button>
