@@ -149,6 +149,8 @@ model OutreachCampaign {
   followupAudioUrl  String    @default("") // next-day follow-up voicemail
   afterHoursMessage String    @default("Sorry, we're closed. Can we follow up with you during normal business hours?")
   followupMessage   String    @default("I tried to follow up with you earlier. Please give me a call back.")
+  emailSubject      String    @default("")
+  emailBody         String    @default("")
   dialedCount       Int       @default(0)
   connectedCount    Int       @default(0)
   revenueCents      Int       @default(0)

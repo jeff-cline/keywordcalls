@@ -25,6 +25,17 @@ export async function pushLeadToCore(input: { name?: string; email?: string; pho
   }
 }
 
+// Read the Zapmail cold-email account status (mailbox count + emails) from the Core.
+export async function getZapmailStatus(): Promise<{ ok: boolean; storedMailboxes: number; activeMailboxes: number; mailboxes: { email: string }[] }> {
+  const h = coreHeaders();
+  if (!h) return { ok: false, storedMailboxes: 0, activeMailboxes: 0, mailboxes: [] };
+  try {
+    const res = await fetch(`${BASE}/api/core/zapmail-status`, { headers: h, signal: AbortSignal.timeout(20000) });
+    const j = await res.json().catch(() => ({}));
+    return { ok: !!j.ok, storedMailboxes: j.storedMailboxes || 0, activeMailboxes: j.activeMailboxes || 0, mailboxes: j.mailboxes || [] };
+  } catch { return { ok: false, storedMailboxes: 0, activeMailboxes: 0, mailboxes: [] }; }
+}
+
 // Place an outbound call via the Core's Twilio (from 1-800-MEDIGAP). Speaks `message` or runs `twimlUrl`.
 export async function coreCall(to: string, opts: { message?: string; twimlUrl?: string }): Promise<{ ok: boolean; callSid?: string; error?: string }> {
   const h = coreHeaders();

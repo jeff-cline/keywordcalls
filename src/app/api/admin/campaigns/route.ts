@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, isStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { campaignSetup, testDrop } from "@/lib/outreach";
+import { campaignSetup, testDrop, dropTwimlUrl } from "@/lib/outreach";
 import { getSettings } from "@/lib/settings";
+import { sendCoreEmail, coreCall } from "@/lib/core";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,11 @@ export async function POST(req: NextRequest) {
     tz: String(b.tz || "America/New_York"),
     afterHoursMessage: String(b.afterHoursMessage || "").slice(0, 500) || undefined,
     followupMessage: String(b.followupMessage || "").slice(0, 500) || undefined,
+    mode: ["voice_email", "voice_only", "email_only"].includes(String(b.mode)) ? String(b.mode) : "voice_email",
+    emailDelayMin: Math.max(0, parseInt(String(b.emailDelayMin ?? "5"), 10) || 5),
+    callsPerMin: Math.max(1, Math.min(60, parseInt(String(b.callsPerMin ?? "30"), 10) || 30)),
+    emailSubject: String(b.emailSubject || "").slice(0, 200) || undefined,
+    emailBody: String(b.emailBody || "").slice(0, 4000) || undefined,
   };
   Object.keys(data).forEach((k) => (data as Record<string, unknown>)[k] === undefined && delete (data as Record<string, unknown>)[k]);
   const id = String(b.id || "");
@@ -68,6 +74,21 @@ export async function PATCH(req: NextRequest) {
   if (action === "delete") {
     await db.outreachCampaign.delete({ where: { id } });
     return NextResponse.json({ ok: true });
+  }
+  if (action === "test25") {
+    // Send a real 25-contact test batch across Zapmail (email) + Core Twilio (voice drop).
+    if (!c.listId) return NextResponse.json({ error: "Attach a list first." }, { status: 400 });
+    let states: string[] = []; try { states = JSON.parse(c.states); } catch {}
+    const contacts = await db.listContact.findMany({ where: { listId: c.listId, ...(states.length ? { state: { in: states } } : {}) }, take: 25 });
+    if (!contacts.length) return NextResponse.json({ error: "No contacts match this campaign." }, { status: 400 });
+    const subject = c.emailSubject || `A quick note from KeywordCalls`;
+    const bodyHtml = (name: string) => `<p>Hi ${name || "there"},</p>${(c.emailBody || "We wanted to reach out. Reply or give us a call back.").split("\n").map((l) => `<p>${l}</p>`).join("")}`;
+    let emails = 0, calls = 0;
+    for (const ct of contacts) {
+      if (c.mode !== "voice_only" && ct.email) { if (await sendCoreEmail(ct.email, subject, bodyHtml(ct.firstName), "campaign_test")) emails++; }
+      if (c.mode !== "email_only" && ct.phone && c.outboundAudioUrl) { const r = await coreCall(ct.phone, { twimlUrl: dropTwimlUrl(c.id, "outbound") }); if (r.ok) calls++; }
+    }
+    return NextResponse.json({ ok: true, attempted: contacts.length, emails, calls });
   }
   return NextResponse.json({ error: "Unknown action." }, { status: 400 });
 }

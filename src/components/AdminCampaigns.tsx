@@ -7,13 +7,19 @@ type Row = {
   id: string; name: string; status: string; listId: string | null; listName: string; listCount: number;
   states: string[]; bidCents: number; hoursStart: string; hoursEnd: string; tz: string;
   outboundAudioUrl: string; followupAudioUrl: string; afterHoursMessage: string; followupMessage: string;
+  mode: string; emailDelayMin: number; callsPerMin: number; emailSubject: string; emailBody: string;
   dialedCount: number; connectedCount: number; revenueCents: number; createdAt: string;
+};
+type Readiness = {
+  mailboxes: number; mailboxDailyCap: number; emailsPerDay: number; sendWindowHours: number; emailsPerHour: number;
+  hourlyOptions: number[]; mailboxEmails: string[]; zapOk: boolean; callsPerMinDefault: number;
+  voice: { hardMaxPerMin: number; hardMaxPerHour: number; recommendedPerMin: number; recommendedPerHour: number; note: string };
 };
 const US = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
 const usd = (c: number) => "$" + (c / 100).toLocaleString("en-US", { minimumFractionDigits: 0 });
 
-export default function AdminCampaigns({ lists, rows }: { lists: ListT[]; rows: Row[] }) {
-  const [tab, setTab] = useState<"current" | "past">("current");
+export default function AdminCampaigns({ lists, rows, readiness }: { lists: ListT[]; rows: Row[]; readiness: Readiness }) {
+  const [tab, setTab] = useState<"current" | "past" | "readiness">("current");
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<Row | "new" | null>(null);
 
@@ -41,15 +47,18 @@ export default function AdminCampaigns({ lists, rows }: { lists: ListT[]; rows: 
         <div className="flex rounded-lg border border-[color:var(--line)] overflow-hidden">
           <button className={`px-4 py-1.5 text-sm font-medium ${tab === "current" ? "bg-[color:var(--brand)] text-white" : "bg-white"}`} onClick={() => setTab("current")}>Campaigns</button>
           <button className={`px-4 py-1.5 text-sm font-medium ${tab === "past" ? "bg-[color:var(--brand)] text-white" : "bg-white"}`} onClick={() => setTab("past")}>Past campaigns</button>
+          <button className={`px-4 py-1.5 text-sm font-medium ${tab === "readiness" ? "bg-[color:var(--brand)] text-white" : "bg-white"}`} onClick={() => setTab("readiness")}>System readiness</button>
         </div>
-        <input className="input !py-1.5 flex-1 min-w-[180px]" placeholder="🔎 Search campaigns…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <button className="btn btn-primary" onClick={() => setEditing("new")}>+ New campaign</button>
+        {tab !== "readiness" && <input className="input !py-1.5 flex-1 min-w-[180px]" placeholder="🔎 Search campaigns…" value={q} onChange={(e) => setQ(e.target.value)} />}
+        {tab !== "readiness" && <button className="btn btn-primary" onClick={() => setEditing("new")}>+ New campaign</button>}
       </div>
 
-      {editing && <CampaignEditor lists={lists} campaign={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
+      {tab === "readiness" && <ReadinessPanel readiness={readiness} rows={rows} />}
+
+      {tab !== "readiness" && editing && <CampaignEditor lists={lists} campaign={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
 
       {/* Campaigns table */}
-      <div className="card p-0 overflow-hidden">
+      {tab !== "readiness" && <div className="card p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Campaign</th><th className="py-2 px-4">Revenue</th><th className="py-2 px-4">List</th><th className="py-2 px-4">Dialed</th><th className="py-2 px-4">Status</th><th className="py-2 px-4">Actions</th></tr></thead>
@@ -74,6 +83,90 @@ export default function AdminCampaigns({ lists, rows }: { lists: ListT[]; rows: 
               ))}
             </tbody>
           </table>
+        </div>
+      </div>}
+    </div>
+  );
+}
+
+function ReadinessPanel({ readiness: r, rows }: { readiness: Readiness; rows: Row[] }) {
+  const [cap, setCap] = useState(String(r.mailboxDailyCap));
+  const [cpm, setCpm] = useState(String(r.callsPerMinDefault));
+  const [win, setWin] = useState(String(r.sendWindowHours));
+  const [testId, setTestId] = useState(rows[0]?.id || "");
+  const [busy, setBusy] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  const perDay = (parseInt(cap) || 0) * r.mailboxes;
+  const perHour = parseFloat(win) > 0 ? Math.floor(perDay / parseFloat(win)) : perDay;
+
+  async function saveThrottles() {
+    setBusy(true); setSavedMsg(null);
+    const res = await fetch("/api/admin/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mailboxDailyCap: cap, callsPerMinDefault: cpm, sendWindowHours: win }) });
+    setBusy(false); setSavedMsg(res.ok ? "Saved. Reload to recompute." : "Save failed.");
+  }
+  async function test25() {
+    if (!testId) return;
+    if (!confirm("Send a REAL 25-contact test batch (emails via Zapmail + voicemail drops via Twilio) to real people in this campaign?")) return;
+    setBusy(true); setSavedMsg(null);
+    const res = await fetch("/api/admin/campaigns", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: testId, action: "test25" }) });
+    const j = await res.json().catch(() => ({}));
+    setBusy(false);
+    alert(res.ok ? `Test sent: ${j.emails} emails + ${j.calls} voicemail drops (of ${j.attempted} contacts).` : (j.error || "Test failed."));
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Zapmail accounts */}
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Zapmail accounts &amp; deliverability</div>
+          <span className={`text-xs font-semibold ${r.zapOk ? "text-[color:#16a34a]" : "text-red-600"}`}>{r.zapOk ? `● ${r.mailboxes} mailboxes connected` : "not connected"}</span>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-4">
+          <div className="rounded-lg bg-[color:var(--soft)] p-3"><div className="text-xs uppercase text-[color:var(--muted)]">Mailboxes</div><div className="text-2xl font-bold">{r.mailboxes}</div></div>
+          <div className="rounded-lg bg-[color:var(--soft)] p-3"><div className="text-xs uppercase text-[color:var(--muted)]">Cap / mailbox / day</div><div className="text-2xl font-bold">{cap}</div></div>
+          <div className="rounded-lg bg-[color:var(--soft)] p-3"><div className="text-xs uppercase text-[color:var(--muted)]">Safe emails / day</div><div className="text-2xl font-bold">{perDay.toLocaleString()}</div></div>
+          <div className="rounded-lg bg-[color:var(--soft)] p-3"><div className="text-xs uppercase text-[color:var(--muted)]">Safe emails / hour</div><div className="text-2xl font-bold">{perHour.toLocaleString()}</div></div>
+        </div>
+        <details className="mt-3">
+          <summary className="text-xs text-[color:var(--muted)] cursor-pointer">View the {r.mailboxEmails.length} sending mailboxes</summary>
+          <div className="mt-2 flex flex-wrap gap-1.5">{r.mailboxEmails.map((e) => <span key={e} className="text-xs bg-[color:var(--soft)] rounded px-2 py-1">{e}</span>)}</div>
+        </details>
+        <p className="text-xs text-[color:var(--muted)] mt-3">Zapmail&apos;s API doesn&apos;t expose a live per-mailbox spam score, so we protect deliverability with a safe daily cap per mailbox (industry standard ~30–50 for warmed Google Workspace inboxes). Stay under the cap and rotate across all mailboxes.</p>
+      </div>
+
+      {/* Throttles */}
+      <div className="card p-6 space-y-4">
+        <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Throttles</div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <label className="label">Emails per mailbox / day<input className="input" value={cap} onChange={(e) => setCap(e.target.value)} /></label>
+          <label className="label">Send window (hours)<input className="input" value={win} onChange={(e) => setWin(e.target.value)} /></label>
+          <label className="label">Voicemail drops / min (per number)<input className="input" value={cpm} onChange={(e) => setCpm(e.target.value)} /></label>
+        </div>
+        <div className="rounded-lg bg-[color:var(--soft)] p-4 text-sm">
+          <div className="font-semibold mb-1">📞 Twilio call-rate rules</div>
+          <ul className="text-[color:var(--muted)] space-y-0.5 list-disc pl-5">
+            <li>Default hard limit: <b>1 call/sec = {r.voice.hardMaxPerMin}/min = {r.voice.hardMaxPerHour.toLocaleString()}/hour</b> (raiseable by Twilio request).</li>
+            <li>Each voicemail drop counts as one call.</li>
+            <li>Reputation-safe from one number: <b>~{r.voice.recommendedPerMin}/min ({r.voice.recommendedPerHour.toLocaleString()}/hour)</b> — add numbers to go faster.</li>
+          </ul>
+          <div className="text-xs mt-2">Your voice-follows-email delay is set per campaign (default 5 min).</div>
+        </div>
+        {savedMsg && <div className="text-sm text-[color:var(--brand2)]">{savedMsg}</div>}
+        <button className="btn btn-primary" disabled={busy} onClick={saveThrottles}>{busy ? "Saving…" : "Save throttles"}</button>
+      </div>
+
+      {/* Test 25 */}
+      <div className="card p-6 space-y-3">
+        <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Test 25 across Zapmail + Twilio</div>
+        <p className="text-sm text-[color:var(--muted)]">Sends a real 25-contact batch through the whole pipeline — emails rotate across your Zapmail mailboxes and voicemail drops go via Twilio — so you can confirm deliverability before running the full campaign.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <select className="input !w-auto" value={testId} onChange={(e) => setTestId(e.target.value)}>
+            {rows.length === 0 && <option value="">no campaigns</option>}
+            {rows.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.mode.replace("_", "+")})</option>)}
+          </select>
+          <button className="btn btn-primary" disabled={busy || !testId} onClick={test25}>{busy ? "Sending…" : "Send 25 test messages 🚀"}</button>
         </div>
       </div>
     </div>
@@ -123,6 +216,8 @@ function CampaignEditor({ lists, campaign, onClose }: { lists: ListT[]; campaign
     name: campaign?.name || "", listId: campaign?.listId || "",
     bidDollars: campaign ? String(campaign.bidCents / 100) : "", hoursStart: campaign?.hoursStart || "08:30", hoursEnd: campaign?.hoursEnd || "17:00", tz: campaign?.tz || "America/New_York",
     afterHoursMessage: campaign?.afterHoursMessage || "", followupMessage: campaign?.followupMessage || "",
+    mode: campaign?.mode || "voice_email", emailDelayMin: String(campaign?.emailDelayMin ?? 5), callsPerMin: String(campaign?.callsPerMin ?? 30),
+    emailSubject: campaign?.emailSubject || "", emailBody: campaign?.emailBody || "",
   });
   const [states, setStates] = useState<string[]>(campaign?.states || []);
   const [busy, setBusy] = useState(false);
@@ -156,6 +251,25 @@ function CampaignEditor({ lists, campaign, onClose }: { lists: ListT[]; campaign
           <label className="label">End (EST)<input type="time" className="input" value={f.hoursEnd} onChange={(e) => set("hoursEnd", e.target.value)} /></label>
         </div>
       </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="label">Channel
+          <select className="input" value={f.mode} onChange={(e) => set("mode", e.target.value)}>
+            <option value="voice_email">Voice + Email</option>
+            <option value="voice_only">Voice only</option>
+            <option value="email_only">Email only</option>
+          </select>
+        </label>
+        <label className="label">Voice follows email by (min)<input className="input" value={f.emailDelayMin} onChange={(e) => set("emailDelayMin", e.target.value)} disabled={f.mode !== "voice_email"} /></label>
+        <label className="label">Voicemail drops / min<input className="input" value={f.callsPerMin} onChange={(e) => set("callsPerMin", e.target.value)} disabled={f.mode === "email_only"} /></label>
+      </div>
+
+      {f.mode !== "voice_only" && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="label">Email subject<input className="input" value={f.emailSubject} onChange={(e) => set("emailSubject", e.target.value)} placeholder="A quick note for you" /></label>
+          <label className="label">Email body<textarea className="input" rows={2} value={f.emailBody} onChange={(e) => set("emailBody", e.target.value)} placeholder="Hi {'{'}first name{'}'}, we wanted to reach out…" /></label>
+        </div>
+      )}
 
       <div>
         <div className="label mb-1">Call in these states ({states.length})</div>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, isGod } from "@/lib/auth";
 import { setSetting } from "@/lib/settings";
 
-const ALLOWED = new Set(["stripeSecretKey", "stripePublishableKey", "stripeWebhookSecret", "notifyEmail", "notifyPhone", "notifyFromNumber", "minFundCents", "setupFeeCents", "calendlyUrl", "twilioAccountSid", "twilioAuthToken", "billableSeconds"]);
+const ALLOWED = new Set(["stripeSecretKey", "stripePublishableKey", "stripeWebhookSecret", "notifyEmail", "notifyPhone", "notifyFromNumber", "minFundCents", "setupFeeCents", "calendlyUrl", "twilioAccountSid", "twilioAuthToken", "billableSeconds", "mailboxDailyCap", "callsPerMinDefault", "sendWindowHours"]);
 const SECRETS = ["stripeSecretKey", "stripeWebhookSecret", "twilioAuthToken"];
 
 // Save integration keys + knobs. God only. Secrets are write-only (never returned).
