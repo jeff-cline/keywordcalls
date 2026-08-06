@@ -7,7 +7,7 @@ type Target = { phone: string; name: string; email: string; city: string; state:
 type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string };
 type Data = {
   campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; listCount: number; sentTotal: number; remaining: number } | null;
-  delivered: number; filtered: number; loaded: number; undelivered: number; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
+  delivered: number; filtered: number; loaded: number; undelivered: number; inQueue: number; processing: boolean; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
 };
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const mask = (n: string) => (n && n.length >= 4 ? `${n.slice(0, -4)}••${n.slice(-2)}` : n || "unknown");
@@ -103,10 +103,18 @@ export default function RolloutConsole() {
         {d?.campaign?.campaignNumber && <div className="text-xs text-[color:var(--muted)] mt-2">Callback number: {d.campaign.campaignNumber}</div>}
       </div>
 
+      {/* Processing status */}
+      <div className={`rounded-xl px-4 py-3 text-sm font-medium flex items-center gap-2 ${d?.processing ? "bg-amber-50 text-amber-800" : "bg-green-50 text-green-800"}`}>
+        {d?.processing
+          ? <><span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" /> Sending in progress — <b>{delivered.toLocaleString()} delivered</b>, <b>{(d?.inQueue || 0).toLocaleString()} still in queue</b>. Callbacks land as more deliver.</>
+          : <><span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" /> All batches complete — <b>{delivered.toLocaleString()} delivered</b>, queue empty. Now watching for callbacks.</>}
+      </div>
+
       {/* Headline stats */}
-      <div className="grid gap-4 sm:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Sent" value={sent.toLocaleString()} />
         <Stat label="Delivered (ringless)" value={delivered.toLocaleString()} sub={d?.filtered ? `${d.filtered.toLocaleString()} DNC-scrubbed` : ""} color="#16a34a" />
+        <Stat label="In queue" value={(d?.inQueue || 0).toLocaleString()} sub={d?.processing ? "still sending" : "done"} color="#f59e0b" />
         <Stat label="Callbacks" value={callbacks.toLocaleString()} color="#2f6bff" />
         <Stat label="Billable (120s+)" value={(d?.billableCount || 0).toLocaleString()} sub="counts toward the goal" color="#16a34a" />
         <Stat label="Calls / hour" value={perHour ? perHour.toFixed(1) : "—"} sub={t0 ? `over ${elapsedH.toFixed(1)}h` : ""} color="#ff7a1a" />
