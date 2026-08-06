@@ -18,7 +18,7 @@ export default function Footer() {
       <div className="mx-auto max-w-6xl px-5 py-12">
         <div className="flex flex-wrap items-start justify-between gap-8">
           <div className="max-w-xs">
-            <img src="/logo.png" alt="KeywordCalls" className="h-8 w-auto mb-3" />
+            <img src="/logo.png" alt="KeywordCalls" className="w-[250px] max-w-full h-auto mb-3" />
             <p className="text-sm text-[color:var(--muted)]">High-intent, keyword-targeted phone calls delivered to your line in real time. 🚀</p>
           </div>
           <div>

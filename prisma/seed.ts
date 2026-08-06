@@ -40,11 +40,25 @@ async function main() {
     setupFeeCents: "40000",       // $400 programmatic setup (locked once running)
     minFundCents: "50000",         // $500 minimum funding
     calendlyUrl: "https://calendly.com/jdcline/book-onboarding-call",
-    notifyEmail: "jeff.cline@me.com",
+    notifyEmail: "jeff.cline@me.com",   // owner email for campaign-live alerts
+    notifyPhone: "9728006670",          // owner phone for campaign-live voice + SMS
+    notifyFromNumber: "+18006334427",   // Twilio caller ID for owner alerts (1-800-MEDIGAP)
+    billableSeconds: "60",              // min buyer talk time before a call is billed
+    emailCogsCents: "5",                // COGS per email sent (5¢ + data)
+    mailboxDailyCap: "40",              // safe cold emails per Zapmail mailbox per day
+    callsPerMinDefault: "30",           // default voicemail-drop rate (1 every 2s per number)
+    sendWindowHours: "8.5",             // hours in the daily send window (8:30–5:00)
   };
   for (const [key, value] of Object.entries(settings)) {
     await db.setting.upsert({ where: { key }, update: {}, create: { key, value } });
   }
+
+  // Coupons.
+  await db.coupon.upsert({
+    where: { code: "JEFFCLINE" },
+    update: { kind: "percent", value: 90, active: true, note: "90% off funding — Jeff Cline" },
+    create: { code: "JEFFCLINE", kind: "percent", value: 90, active: true, note: "90% off funding — Jeff Cline" },
+  });
 
   console.log("✅ keywordcalls seed complete — God: jeff.cline@me.com / TEMP!234 (must change on first login)");
 }

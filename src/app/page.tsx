@@ -7,16 +7,21 @@ export const dynamic = "force-dynamic";
 const usd = (c: number) => "$" + (c / 100).toLocaleString("en-US");
 
 export default async function Home() {
-  const [plans, keywords] = await Promise.all([
-    db.plan.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
-    db.keyword.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
-  ]);
+  const plans = await db.plan.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } });
 
   const steps = [
-    { n: "1", t: "Pick your keyword", d: "Health Insurance, Medicare, Peptides — whatever calls you want." },
+    { n: "1", t: "Type your keyword", d: "Health Insurance, Regenerative Medicine, Roofing, Diabetes Care — your money word." },
     { n: "2", t: "Set your bid", d: "You control what you pay per call. Higher bids win more calls." },
     { n: "3", t: "Your routing number", d: "The phone we deliver live calls to, in real time." },
     { n: "4", t: "Your call hours", d: "Only get calls when you're ready to answer them." },
+  ];
+
+  // Illustrative client results (examples).
+  const testimonials = [
+    { kw: "Health Insurance", client: "Brooks", spend: "$22,000", ret: "$88,000", roas: "4.0×" },
+    { kw: "Peptides", client: "Keith", spend: "$13,000", ret: "$45,500", roas: "3.5×" },
+    { kw: "Genetic Tests", client: "Trevor", spend: "$400,000", ret: "$1.5M", roas: "3.75×" },
+    { kw: "Senior", client: "Chad", spend: "52,000 calls", ret: "$25M", roas: "3.1×" },
   ];
 
   return (
@@ -38,6 +43,10 @@ export default async function Home() {
             <a href="/book" className="btn btn-ghost text-base !px-7 !py-3.5">Book an onboarding call</a>
           </div>
           <div className="mt-4 text-xs text-[color:var(--muted)]">No long-term contract to start · Pre-funded, pay only for the calls you get</div>
+          {/* Logo fills the space between the promise and "It's this simple" */}
+          <div className="mt-10 flex justify-center">
+            <img src="/logo.png" alt="KeywordCalls" className="h-28 sm:h-36 w-auto opacity-95" />
+          </div>
         </div>
       </section>
 
@@ -55,23 +64,25 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Keyword prices */}
-      {keywords.length > 0 && (
-        <section className="bg-[color:var(--soft)]">
-          <div className="mx-auto max-w-6xl px-5 py-14">
-            <h2 className="text-2xl font-bold text-center">Per-call pricing by keyword</h2>
-            <p className="text-center text-sm text-[color:var(--muted)] mt-2">A bidding system — these are starting call prices. You set your own bid.</p>
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
-              {keywords.map((k) => (
-                <div key={k.id} className="card px-5 py-3 flex items-center gap-3">
-                  <span className="font-semibold">{k.name}</span>
-                  <span className="text-[color:var(--brand2)] font-bold">{usd(k.priceCents)}/call</span>
-                </div>
-              ))}
-            </div>
+      {/* Testimonials — real returns from real keywords */}
+      <section className="bg-[color:var(--soft)]">
+        <div className="mx-auto max-w-6xl px-5 py-16">
+          <h2 className="text-2xl font-bold text-center">The calls pay for themselves 🚀</h2>
+          <p className="text-center text-sm text-[color:var(--muted)] mt-2">It&apos;s a bidding system — you set your own price per call. Here&apos;s what our clients do with it.</p>
+          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {testimonials.map((t) => (
+              <div key={t.client} className="card p-6 text-center flex flex-col">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand2)]">{t.kw}</div>
+                <div className="mt-4 text-5xl font-extrabold text-[color:var(--brand)] leading-none">{t.roas}</div>
+                <div className="text-xs uppercase tracking-wide text-[color:var(--muted)] mt-1">ROAS</div>
+                <div className="mt-4 text-sm text-[color:var(--ink)]"><b>{t.spend}</b> spend<br />→ <b>{t.ret}</b> returned</div>
+                <div className="mt-auto pt-5 text-sm font-semibold">— {t.client}</div>
+              </div>
+            ))}
           </div>
-        </section>
-      )}
+          <p className="text-center text-[11px] text-[color:var(--muted)] mt-6">Illustrative client results. Your numbers depend on your close rate, bid, and market.</p>
+        </div>
+      </section>
 
       {/* Plans */}
       <section id="pricing" className="mx-auto max-w-6xl px-5 py-16">

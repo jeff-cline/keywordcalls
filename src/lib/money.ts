@@ -10,7 +10,11 @@ export async function creditBalance(customerId: string, amountCents: number, kin
     const c = await tx.customer.findUnique({ where: { id: customerId } });
     if (!c) return { balance: 0, already: false };
     const bal = c.balanceCents + amountCents;
-    await tx.customer.update({ where: { id: customerId }, data: { balanceCents: bal, ...(kind === "fund" || kind === "coupon" ? { status: c.status === "new" ? "funded" : c.status } : {}) } });
+    await tx.customer.update({ where: { id: customerId }, data: {
+      balanceCents: bal,
+      ...(kind === "fund" || kind === "coupon" ? { status: c.status === "new" ? "funded" : c.status } : {}),
+      ...(amountCents > 0 ? { lowBalanceNotifiedAt: null } : {}), // topping up re-arms the low-balance warning
+    } });
     await tx.ledgerEntry.create({ data: { customerId, kind, amountCents, balanceAfterCents: bal, note, stripeRef } });
     return { balance: bal, already: false };
   });

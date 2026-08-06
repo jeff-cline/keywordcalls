@@ -28,13 +28,18 @@ export async function POST(req: NextRequest) {
   if (chargeCents < 50) return NextResponse.json({ error: "Charge amount is too small." }, { status: 400 });
 
   const origin = req.headers.get("origin") || "https://keywordcalls.com";
+  // Save the card so we can auto-top-up off-session later. Reuse the Stripe customer if we have one.
+  const customerOpts: Record<string, unknown> = customer.stripeCustomerId
+    ? { customer: customer.stripeCustomerId }
+    : { customer_creation: "always", customer_email: acct.email };
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     line_items: [{ price_data: { currency: "usd", product_data: { name: "KeywordCalls account funding" }, unit_amount: chargeCents }, quantity: 1 }],
-    customer_email: acct.email,
+    payment_intent_data: { setup_future_usage: "off_session" },
     metadata: { customerId: customer.id, creditCents: String(creditCents), couponCode },
     success_url: `${origin}/dashboard?funded=1`,
     cancel_url: `${origin}/dashboard/fund?canceled=1`,
-  });
+    ...customerOpts,
+  } as Parameters<typeof stripe.checkout.sessions.create>[0]);
   return NextResponse.json({ url: session.url });
 }

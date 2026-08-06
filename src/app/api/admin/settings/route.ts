@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, isGod } from "@/lib/auth";
 import { setSetting } from "@/lib/settings";
 
-const ALLOWED = new Set(["stripeSecretKey", "stripePublishableKey", "stripeWebhookSecret", "notifyEmail", "minFundCents", "setupFeeCents", "calendlyUrl"]);
+const ALLOWED = new Set(["stripeSecretKey", "stripePublishableKey", "stripeWebhookSecret", "notifyEmail", "notifyPhone", "notifyFromNumber", "minFundCents", "setupFeeCents", "calendlyUrl", "twilioAccountSid", "twilioAuthToken", "billableSeconds"]);
+const SECRETS = ["stripeSecretKey", "stripeWebhookSecret", "twilioAuthToken"];
 
 // Save integration keys + knobs. God only. Secrets are write-only (never returned).
 export async function POST(req: NextRequest) {
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
     if (!ALLOWED.has(k)) continue;
     // skip masked/blank secret fields so we don't overwrite a stored key with empty
     if (typeof v !== "string") continue;
-    if (["stripeSecretKey", "stripeWebhookSecret"].includes(k) && (v === "" || v.includes("•"))) continue;
+    if (SECRETS.includes(k) && (v === "" || v.includes("•"))) continue;
     await setSetting(k, v.slice(0, 500));
     saved++;
   }

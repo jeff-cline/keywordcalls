@@ -6,10 +6,11 @@ type Coupon = { id: string; code: string; kind: string; value: number; active: b
 type Props = {
   hasSecret: boolean; hasWebhook: boolean;
   publishableKey: string; notifyEmail: string; minFundDollars: string; calendlyUrl: string;
+  hasTwilioToken: boolean; twilioSid: string; notifyPhone: string; notifyFromNumber: string;
   coupons: Coupon[];
 };
 
-export default function AdminSettings({ hasSecret, hasWebhook, publishableKey, notifyEmail, minFundDollars, calendlyUrl, coupons }: Props) {
+export default function AdminSettings({ hasSecret, hasWebhook, publishableKey, notifyEmail, minFundDollars, calendlyUrl, hasTwilioToken, twilioSid, notifyPhone, notifyFromNumber, coupons }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -21,16 +22,21 @@ export default function AdminSettings({ hasSecret, hasWebhook, publishableKey, n
   const [email, setEmail] = useState(notifyEmail);
   const [minFund, setMinFund] = useState(minFundDollars);
   const [cal, setCal] = useState(calendlyUrl);
+  const [tSid, setTSid] = useState(twilioSid);
+  const [tTok, setTTok] = useState("");
+  const [nPhone, setNPhone] = useState(notifyPhone);
+  const [nFrom, setNFrom] = useState(notifyFromNumber);
 
   const saveSettings = async () => {
     setBusy(true); setErr(null); setMsg(null);
     try {
-      const body: Record<string, string> = { stripePublishableKey: pk, notifyEmail: email, minFundCents: String(Math.round((parseFloat(minFund) || 0) * 100)), calendlyUrl: cal };
+      const body: Record<string, string> = { stripePublishableKey: pk, notifyEmail: email, minFundCents: String(Math.round((parseFloat(minFund) || 0) * 100)), calendlyUrl: cal, twilioAccountSid: tSid, notifyPhone: nPhone, notifyFromNumber: nFrom };
       if (sk.trim()) body.stripeSecretKey = sk.trim();
       if (wh.trim()) body.stripeWebhookSecret = wh.trim();
+      if (tTok.trim()) body.twilioAuthToken = tTok.trim();
       const res = await fetch("/api/admin/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error("Save failed.");
-      setMsg("Saved."); setSk(""); setWh(""); router.refresh();
+      setMsg("Saved."); setSk(""); setWh(""); setTTok(""); router.refresh();
     } catch (e) { setErr(e instanceof Error ? e.message : "Save failed."); }
     finally { setBusy(false); }
   };
@@ -65,6 +71,20 @@ export default function AdminSettings({ hasSecret, hasWebhook, publishableKey, n
         </div>
         <div className="mt-4 text-xs text-[color:var(--muted)]">Webhook endpoint for Stripe: <code className="bg-[color:var(--soft)] px-1.5 py-0.5 rounded">https://keywordcalls.com/api/stripe/webhook</code> (event: <b>checkout.session.completed</b>)</div>
         <button className="btn mt-4" disabled={busy} onClick={saveSettings}>{busy ? "Saving…" : "Save integrations"}</button>
+      </div>
+
+      {/* Telephony */}
+      <div className="card p-6">
+        <h2 className="text-lg font-bold mb-1">Telephony &amp; owner alerts</h2>
+        <p className="text-sm text-[color:var(--muted)] mb-4">Twilio powers the customer tracking numbers, call routing, and the call · text · email you get when a campaign goes live. Same Twilio account as the rest of the operation. Auth token is write-only.</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div><label className="label">Twilio Account SID</label><input className="input" placeholder="AC…" value={tSid} onChange={(e) => setTSid(e.target.value)} /></div>
+          <div><label className="label">Twilio Auth Token {hasTwilioToken && <span className="text-[color:#16a34a]">· set ✓</span>}</label><input className="input" type="password" placeholder={hasTwilioToken ? "•••••••• (leave blank to keep)" : "your auth token"} value={tTok} onChange={(e) => setTTok(e.target.value)} /></div>
+          <div><label className="label">Alert me at (phone — call + text)</label><input className="input" value={nPhone} onChange={(e) => setNPhone(e.target.value)} placeholder="9728006670" /></div>
+          <div><label className="label">Outbound caller ID (Twilio number)</label><input className="input" value={nFrom} onChange={(e) => setNFrom(e.target.value)} placeholder="+18006334427" /></div>
+        </div>
+        <div className="mt-4 text-xs text-[color:var(--muted)]">When a campaign goes live you get a phone call, a text, and an email at the addresses above.</div>
+        <button className="btn mt-4" disabled={busy} onClick={saveSettings}>{busy ? "Saving…" : "Save telephony"}</button>
       </div>
 
       {/* Coupons */}

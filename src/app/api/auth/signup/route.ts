@@ -35,12 +35,19 @@ export async function POST(req: NextRequest) {
   let referredBy: string | null = null;
   if (b.ref) { const r = await db.account.findUnique({ where: { refSlug: String(b.ref) } }).catch(() => null); referredBy = r?.id ?? null; }
 
+  // bids: { keyword: dollars } → cents
+  const bidsCents: Record<string, number> = {};
+  if (b.bids && typeof b.bids === "object") for (const [k, v] of Object.entries(b.bids)) { const n = Math.round(parseFloat(String(v)) * 100); if (n > 0) bidsCents[k] = n; }
+
   await db.customer.create({
     data: {
       accountId: acct.id,
       keywords: JSON.stringify(Array.isArray(b.keywords) ? b.keywords : []),
+      bidsJson: JSON.stringify(bidsCents),
       geoType: ["local", "statewide", "regional", "national"].includes(b.geoType) ? b.geoType : "local",
       geoStates: JSON.stringify(Array.isArray(b.geoStates) ? b.geoStates : []),
+      geoZips: JSON.stringify(Array.isArray(b.geoZips) ? b.geoZips : []),
+      geoExcludeStates: JSON.stringify(Array.isArray(b.geoExcludeStates) ? b.geoExcludeStates : []),
       hours: JSON.stringify(b.hours && typeof b.hours === "object" ? b.hours : {}),
       routingNumber: String(b.routingNumber || "").slice(0, 40),
       agreementSignedAt: b.agreed ? new Date() : null,

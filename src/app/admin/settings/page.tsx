@@ -13,7 +13,7 @@ export default async function AdminSettingsPage() {
   if (!isGod(s)) redirect("/admin");
 
   const [st, coupons] = await Promise.all([
-    getSettings(["stripeSecretKey", "stripePublishableKey", "stripeWebhookSecret", "notifyEmail", "minFundCents", "calendlyUrl"]),
+    getSettings(["stripeSecretKey", "stripePublishableKey", "stripeWebhookSecret", "notifyEmail", "minFundCents", "calendlyUrl", "twilioAccountSid", "twilioAuthToken", "notifyPhone", "notifyFromNumber"]),
     db.coupon.findMany({ orderBy: { createdAt: "desc" } }),
   ]);
 
@@ -34,6 +34,10 @@ export default async function AdminSettingsPage() {
           notifyEmail={st.notifyEmail || ""}
           minFundDollars={String((parseInt(st.minFundCents || "50000", 10)) / 100)}
           calendlyUrl={st.calendlyUrl || ""}
+          hasTwilioToken={!!st.twilioAuthToken}
+          twilioSid={st.twilioAccountSid || ""}
+          notifyPhone={st.notifyPhone || ""}
+          notifyFromNumber={st.notifyFromNumber || ""}
           coupons={coupons}
         />
       </main>

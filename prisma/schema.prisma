@@ -40,17 +40,120 @@ model Customer {
   account         Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   keywords        String    @default("[]") // JSON string[] of keyword ids/names
   geoType         String    @default("local") // local | statewide | regional | national
-  geoStates       String    @default("[]") // JSON 2-letter codes / regions
+  geoStates       String    @default("[]") // JSON 2-letter codes (statewide=1, regional<=3)
+  geoZips         String    @default("[]") // JSON ZIP codes (local accounts route by ZIP)
+  geoExcludeStates String   @default("[]") // JSON 2-letter codes to EXCLUDE (national accounts)
   hours           String    @default("{}") // JSON { days:[], start:"09:00", end:"17:00" }
   routingNumber   String    @default("") // where their calls go (E.164)
   planId          String    @default("")
   balanceCents    Int       @default(0) // pre-funded balance
   agreementSignedAt DateTime?
   freeCallUsed    Boolean   @default(false)
-  twilioNumber    String    @default("") // provisioned tracking number (Phase 3)
+  twilioNumber    String    @default("") // provisioned tracking number (E.164)
+  twilioNumberSid String    @default("") // Twilio IncomingPhoneNumber SID (for release)
+  areaCode        String    @default("") // desired area code (from phone/zip)
+  bidsJson        String    @default("{}") // JSON { keyword: bidCents } — what they'll pay per call
   status          String    @default("new") // new | funded | live | paused
   referredBy      String? // ref account id (affiliate attribution)
+  autoTopUp       Boolean   @default(false) // auto-charge saved card when low
+  autoTopUpAmountCents Int  @default(0) // how much to add on auto-top-up
+  lowBalanceNotifiedAt DateTime? // last "running low" email (reset on top-up)
+  stripeCustomerId String   @default("") // for saved-card off-session top-ups
   createdAt       DateTime  @default(now())
+
+  calls           Call[]
+}
+
+// One inbound call delivered to a customer's tracking number.
+model Call {
+  id           String    @id @default(cuid())
+  customerId   String
+  customer     Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  callSid      String    @unique @default("")
+  fromNumber   String    @default("") // the consumer who called
+  toNumber     String    @default("") // the customer's tracking number
+  keyword      String    @default("")
+  status       String    @default("initiated") // initiated | in-progress | completed | no-answer | busy | failed | rejected
+  durationSec  Int       @default(0)
+  connectSec   Int       @default(0) // buyer-leg talk time (billing clock)
+  chargedCents Int       @default(0) // charged to the customer's balance (their bid)
+  costCents    Int       @default(0) // our Twilio cost
+  billed       Boolean   @default(false)
+  recordingUrl String    @default("")
+  appended     String    @default("{}") // JSON: Core data-append on the caller (God-only)
+  createdAt    DateTime  @default(now())
+
+  @@index([customerId, createdAt])
+  @@map("call")
+}
+
+// Every email we send (for COGS + audit). COGS per email is a Setting (emailCogsCents).
+model EmailLog {
+  id        String   @id @default(cuid())
+  to        String   @default("")
+  subject   String   @default("")
+  kind      String   @default("") // low_balance | campaign | receipt | other
+  ok        Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("email_log")
+}
+
+// An uploaded list of people to call/email (reusable across campaigns). Timestamped.
+model CallList {
+  id        String   @id @default(cuid())
+  name      String   @default("")
+  source    String   @default("") // original filename
+  rowCount  Int      @default(0)
+  createdAt DateTime @default(now())
+  contacts  ListContact[]
+  campaigns OutreachCampaign[]
+  @@map("call_list")
+}
+
+model ListContact {
+  id        String   @id @default(cuid())
+  listId    String
+  list      CallList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  firstName String   @default("")
+  lastName  String   @default("")
+  phone     String   @default("") // primary E.164
+  altPhones String   @default("[]") // JSON extra numbers
+  email     String   @default("")
+  city      String   @default("")
+  state     String   @default("")
+  zip       String   @default("")
+  createdAt DateTime @default(now())
+  @@index([listId])
+  @@index([listId, state])
+  @@map("list_contact")
+}
+
+// An outbound calling/voice-drop campaign the God builds from a list.
+model OutreachCampaign {
+  id                String    @id @default(cuid())
+  name              String    @default("")
+  listId            String?
+  list              CallList? @relation(fields: [listId], references: [id])
+  states            String    @default("[]") // JSON filter of 2-letter states
+  bidCents          Int       @default(0) // what a delivered call is worth
+  hoursStart        String    @default("08:30")
+  hoursEnd          String    @default("17:00")
+  tz                String    @default("America/New_York")
+  status            String    @default("off") // off | on
+  mode              String    @default("voice_email") // voice_email | voice_only | email_only
+  emailDelayMin     Int       @default(5) // minutes after the email before the voice drop
+  callsPerMin       Int       @default(30) // voicemail-drop throttle for this campaign
+  outboundAudioUrl  String    @default("") // played to the voicemail machine
+  followupAudioUrl  String    @default("") // next-day follow-up voicemail
+  afterHoursMessage String    @default("Sorry, we're closed. Can we follow up with you during normal business hours?")
+  followupMessage   String    @default("I tried to follow up with you earlier. Please give me a call back.")
+  dialedCount       Int       @default(0)
+  connectedCount    Int       @default(0)
+  revenueCents      Int       @default(0)
+  createdAt         DateTime  @default(now())
+  @@map("outreach_campaign")
 }
 
 // Monthly plans (editable prices).

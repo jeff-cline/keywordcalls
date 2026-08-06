@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 const COOKIE = "kwc_session";
 const secret = new TextEncoder().encode(process.env.AUTH_SECRET || "kwc_dev_secret");
 
-export type Session = { uid: string; email: string; role: string; name: string };
+export type Session = { uid: string; email: string; role: string; name: string; imp?: string };
 
 export async function hashPassword(pw: string): Promise<string> {
   return bcrypt.hash(pw, 10);
@@ -15,14 +15,16 @@ export async function verifyPassword(pw: string, hash: string): Promise<boolean>
   return bcrypt.compare(pw, hash).catch(() => false);
 }
 
-export async function createSession(acct: { id: string; email: string; role: string; firstName: string; lastName: string }): Promise<void> {
-  const token = await new SignJWT({ email: acct.email, role: acct.role, name: `${acct.firstName} ${acct.lastName}`.trim() })
+export async function createSession(acct: { id: string; email: string; role: string; firstName: string; lastName: string }, imp?: string): Promise<void> {
+  const payload: Record<string, unknown> = { email: acct.email, role: acct.role, name: `${acct.firstName} ${acct.lastName}`.trim() };
+  if (imp) payload.imp = imp; // uid of the God/staff account impersonating this one
+  const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(acct.id)
     .setIssuedAt()
-    .setExpirationTime("30d")
+    .setExpirationTime(imp ? "2h" : "30d")
     .sign(secret);
-  (await cookies()).set(COOKIE, token, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30 });
+  (await cookies()).set(COOKIE, token, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: imp ? 60 * 60 * 2 : 60 * 60 * 24 * 30 });
 }
 
 export async function clearSession(): Promise<void> {
@@ -34,7 +36,7 @@ export async function getSession(): Promise<Session | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret);
-    return { uid: String(payload.sub || ""), email: String(payload.email || ""), role: String(payload.role || ""), name: String(payload.name || "") };
+    return { uid: String(payload.sub || ""), email: String(payload.email || ""), role: String(payload.role || ""), name: String(payload.name || ""), imp: payload.imp ? String(payload.imp) : undefined };
   } catch {
     return null;
   }
