@@ -62,6 +62,10 @@ export async function GET(req: NextRequest) {
   let delivered = 0, filtered = 0, loaded = 0, undelivered = 0, inQueue = 0, processing = false;
   for (const b of batches) { if (b.jdiCampaignId) { const ov = await jdiOverview(b.jdiCampaignId); if (ov) { delivered += Number(ov.delivered || 0); filtered += Number(ov.filtered || 0); loaded += Number(ov.numbersLoaded || 0); undelivered += Number(ov.undelivered || 0); inQueue += Number(ov.hopperCount || 0); if (String(ov.status || "").toUpperCase() === "ACTIVE") processing = true; } } }
 
+  // Persist the live JDI delivered/filtered back to the campaign so /admin economics (cost per
+  // delivered drop) reflect reality without polling JDI on every admin refresh.
+  if (!combined && camps.length === 1) await db.outreachCampaign.update({ where: { id: camps[0].id }, data: { deliveredCount: delivered, filteredCount: filtered } }).catch(() => {});
+
   const sent = batches.reduce((a, b) => a + b.size, 0);
   const one = camps[0];
   const campaign = combined
