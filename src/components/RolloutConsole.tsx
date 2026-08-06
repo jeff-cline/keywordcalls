@@ -57,6 +57,7 @@ export default function RolloutConsole() {
   const rate = delivered ? billable / delivered : 0;        // BILLABLE calls (120s+) per delivered drop
   const perHour = t0 ? billable / elapsedH : 0;             // billable calls/hour (the goal metric)
   const neededSends = rate > 0 ? Math.ceil((parseFloat(goal) || 0) / rate) : 0; // drops to yield goal billable calls
+  const canLaunch = !!(d?.campaign?.hasAudio && d?.campaign?.routingNumber); // never send without a recording AND a callback number
 
   // per-hour buckets since t0 (cap 48 bars)
   const { bars, cum } = useMemo(() => {
@@ -99,10 +100,11 @@ export default function RolloutConsole() {
           <div className="text-xs text-[color:var(--muted)]">{d?.campaign ? `${sent.toLocaleString()} sent · ${d.campaign.remaining.toLocaleString()} left in list` : ""}</div>
         </div>
         {!d?.campaign?.hasAudio && <div className="text-sm text-amber-700 mb-3">⚠️ Record the outbound voicemail above before launching.</div>}
+        {!d?.campaign?.routingNumber && <div className="text-sm text-amber-700 mb-3">⚠️ Set a callback number below — nothing can launch without one.</div>}
         <div className="grid gap-3 sm:grid-cols-3">
-          <button className="btn btn-primary !py-3 text-base" disabled={busy || !d?.campaign?.hasAudio} onClick={() => launch(100, 300, "Batch 1 · 100 / 20 min")}>🚀 Batch 1 (100)</button>
-          <button className="btn btn-primary !py-3 text-base" disabled={busy || !d?.campaign?.hasAudio} onClick={() => launch(500, 500, "Batch 2 · 500 / hr")}>🚀 Batch 2 (500)</button>
-          <button className="btn !bg-[color:#ff7a1a] text-white !border-0 !py-3 text-base" disabled={busy || !d?.campaign?.hasAudio} onClick={() => launch(1000, 1000, "Batch 3 · 1,000")}>🚀 Batch 3 (1,000)</button>
+          <button className="btn btn-primary !py-3 text-base" disabled={busy || !canLaunch} onClick={() => launch(100, 300, "Batch 1 · 100 / 20 min")}>🚀 Batch 1 (100)</button>
+          <button className="btn btn-primary !py-3 text-base" disabled={busy || !canLaunch} onClick={() => launch(500, 500, "Batch 2 · 500 / hr")}>🚀 Batch 2 (500)</button>
+          <button className="btn !bg-[color:#ff7a1a] text-white !border-0 !py-3 text-base" disabled={busy || !canLaunch} onClick={() => launch(1000, 1000, "Batch 3 · 1,000")}>🚀 Batch 3 (1,000)</button>
         </div>
 
         {/* Custom batch — pick any amount of the remaining leads */}
@@ -111,7 +113,7 @@ export default function RolloutConsole() {
           <div className="flex flex-wrap items-end gap-3">
             <label className="label">How many to send<input className="input !w-32" value={customAmt} onChange={(e) => setCustomAmt(e.target.value)} placeholder="e.g. 2500" /></label>
             <label className="label">Per hour (throttle)<input className="input !w-32" value={customThr} onChange={(e) => setCustomThr(e.target.value)} /></label>
-            <button className="btn btn-primary !py-2.5" disabled={busy || !d?.campaign?.hasAudio} onClick={() => { const n = parseInt(customAmt, 10) || 0; if (n > 0) launch(n, parseInt(customThr, 10) || 1000, `Batch ${(d?.batches.length || 0) + 1} · ${n.toLocaleString()}`); }}>🚀 Go — custom</button>
+            <button className="btn btn-primary !py-2.5" disabled={busy || !canLaunch} onClick={() => { const n = parseInt(customAmt, 10) || 0; if (n > 0) launch(n, parseInt(customThr, 10) || 1000, `Batch ${(d?.batches.length || 0) + 1} · ${n.toLocaleString()}`); }}>🚀 Go — custom</button>
           </div>
         </div>
 

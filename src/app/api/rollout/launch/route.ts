@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
   const c = await db.outreachCampaign.findUnique({ where: { id: campaignId } });
   if (!c) return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
   if (!c.outboundAudioUrl) return NextResponse.json({ error: "Record the outbound voicemail on this campaign first." }, { status: 400 });
+  if (!c.routingNumber) return NextResponse.json({ error: "Set a callback routing number first — nothing can send without one." }, { status: 400 });
   if (!c.listId) return NextResponse.json({ error: "No list attached." }, { status: 400 });
 
   // Ensure the campaign has its own Twilio callback number.

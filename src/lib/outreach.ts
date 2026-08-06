@@ -4,7 +4,7 @@ import { coreCall } from "@/lib/core";
 const BASE = "https://keywordcalls.com";
 
 type Campaign = {
-  id: string; listId: string | null; bidCents: number; states: string; mode?: string;
+  id: string; listId: string | null; bidCents: number; states: string; mode?: string; routingNumber?: string;
   outboundAudioUrl: string; followupAudioUrl: string; hoursStart: string; hoursEnd: string; tz: string;
 };
 
@@ -16,6 +16,7 @@ export function campaignSetup(c: Campaign): { ok: boolean; missing: string[] } {
   let states: string[] = []; try { states = JSON.parse(c.states); } catch {}
   if (!states.length) missing.push("target states");
   if (c.mode !== "email_only" && !c.outboundAudioUrl) missing.push("outbound voicemail recording");
+  if (!c.routingNumber) missing.push("a callback routing number");
   // follow-up recording is optional (ringless delivery handles the drop)
   return { ok: missing.length === 0, missing };
 }
