@@ -153,10 +153,13 @@ model OutreachCampaign {
   followupMessage   String    @default("I tried to follow up with you earlier. Please give me a call back.")
   emailSubject      String    @default("")
   emailBody         String    @default("")
+  routingNumber     String    @default("") // where callbacks route — the campaign owner / call center (E.164)
   dialedCount       Int       @default(0)
-  connectedCount    Int       @default(0)
+  connectedCount    Int       @default(0) // callbacks received
+  deliveredCount    Int       @default(0) // ringless voicemails actually delivered (from JDI)
+  filteredCount     Int       @default(0) // scrubbed by DNC / carrier filters (from JDI)
   revenueCents      Int       @default(0)
-  campaignNumber    String    @default("") // this campaign's own caller-ID / callback number
+  campaignNumber    String    @default("") // this campaign's own caller-ID / callback number (Twilio)
   campaignNumberSid String    @default("")
   cursor            String    @default("") // last processed ListContact id (paced runner)
   jdiWav            String    @default("") // recording uploaded to JDI (ringless audio URL)

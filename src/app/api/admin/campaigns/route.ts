@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
     hoursStart: String(b.hoursStart || "08:30"),
     hoursEnd: String(b.hoursEnd || "17:00"),
     tz: String(b.tz || "America/New_York"),
+    routingNumber: String(b.routingNumber || "").slice(0, 40),
     afterHoursMessage: String(b.afterHoursMessage || "").slice(0, 500) || undefined,
     followupMessage: String(b.followupMessage || "").slice(0, 500) || undefined,
     mode: ["voice_email", "voice_only", "email_only"].includes(String(b.mode)) ? String(b.mode) : "voice_email",

@@ -7,8 +7,8 @@ type Row = {
   id: string; name: string; status: string; listId: string | null; listName: string; listCount: number;
   states: string[]; bidCents: number; hoursStart: string; hoursEnd: string; tz: string;
   outboundAudioUrl: string; followupAudioUrl: string; afterHoursMessage: string; followupMessage: string;
-  mode: string; emailDelayMin: number; callsPerMin: number; emailSubject: string; emailBody: string;
-  dialedCount: number; connectedCount: number; revenueCents: number; startedAt: string | null; finishedAt: string | null; createdAt: string;
+  mode: string; emailDelayMin: number; callsPerMin: number; emailSubject: string; emailBody: string; routingNumber: string;
+  dialedCount: number; connectedCount: number; deliveredCount: number; filteredCount: number; revenueCents: number; startedAt: string | null; finishedAt: string | null; createdAt: string;
 };
 type Readiness = {
   mailboxes: number; mailboxDailyCap: number; emailsPerDay: number; sendWindowHours: number; emailsPerHour: number;
@@ -65,7 +65,7 @@ export default function AdminCampaigns({ lists, rows, readiness, numbers }: { li
       {(tab === "current" || tab === "past") && <div className="card p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Campaign</th><th className="py-2 px-4">Revenue</th><th className="py-2 px-4">List</th><th className="py-2 px-4">Dialed</th><th className="py-2 px-4">Started / Finished</th><th className="py-2 px-4">Status</th><th className="py-2 px-4">Actions</th></tr></thead>
+            <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Campaign</th><th className="py-2 px-4">Revenue</th><th className="py-2 px-4">List</th><th className="py-2 px-4">Sent / Delivered / Callbacks</th><th className="py-2 px-4">Started / Finished</th><th className="py-2 px-4">Status</th><th className="py-2 px-4">Actions</th></tr></thead>
             <tbody>
               {filtered.length === 0 && <tr><td colSpan={7} className="py-6 px-4 text-[color:var(--muted)]">No campaigns{q ? " match your search" : " yet"}.</td></tr>}
               {filtered.map((c) => (
@@ -73,7 +73,11 @@ export default function AdminCampaigns({ lists, rows, readiness, numbers }: { li
                   <td className="py-2 px-4"><div className="font-medium">{c.name}</div><div className="text-xs text-[color:var(--muted)]">{c.states.length} states · {usd(c.bidCents)}/call · {c.hoursStart}–{c.hoursEnd} {c.tz.split("/")[1]?.replace("_", " ")}</div></td>
                   <td className="py-2 px-4 font-bold">{usd(c.revenueCents)}</td>
                   <td className="py-2 px-4">{c.listName || "—"}<div className="text-xs text-[color:var(--muted)]">{c.listCount.toLocaleString()} contacts</div></td>
-                  <td className="py-2 px-4">{c.dialedCount.toLocaleString()}{c.listCount ? <div className="text-xs text-[color:var(--muted)]">of {c.listCount.toLocaleString()}</div> : null}</td>
+                  <td className="py-2 px-4 whitespace-nowrap">
+                    <div>📨 {c.dialedCount.toLocaleString()}{c.listCount ? <span className="text-[color:var(--muted)]"> / {c.listCount.toLocaleString()}</span> : null}</div>
+                    <div className="text-xs text-[color:#16a34a]">✓ {c.deliveredCount.toLocaleString()} delivered{c.filteredCount ? <span className="text-[color:var(--muted)]"> · {c.filteredCount.toLocaleString()} scrubbed</span> : null}</div>
+                    <div className="text-xs text-[color:var(--brand2)]">📞 {c.connectedCount.toLocaleString()} callbacks</div>
+                  </td>
                   <td className="py-2 px-4 text-xs text-[color:var(--muted)] whitespace-nowrap">
                     <div>▶ {c.startedAt ? new Date(c.startedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</div>
                     <div>✓ {c.finishedAt ? new Date(c.finishedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : c.status === "on" ? "running…" : "—"}</div>
@@ -256,7 +260,7 @@ function CampaignEditor({ lists, campaign, onClose }: { lists: ListT[]; campaign
     bidDollars: campaign ? String(campaign.bidCents / 100) : "", hoursStart: campaign?.hoursStart || "08:30", hoursEnd: campaign?.hoursEnd || "17:00", tz: campaign?.tz || "America/New_York",
     afterHoursMessage: campaign?.afterHoursMessage || "", followupMessage: campaign?.followupMessage || "",
     mode: campaign?.mode || "voice_email", emailDelayMin: String(campaign?.emailDelayMin ?? 5), callsPerMin: String(campaign?.callsPerMin ?? 30),
-    emailSubject: campaign?.emailSubject || "", emailBody: campaign?.emailBody || "",
+    emailSubject: campaign?.emailSubject || "", emailBody: campaign?.emailBody || "", routingNumber: campaign?.routingNumber || "",
   });
   const [states, setStates] = useState<string[]>(campaign?.states || []);
   const [busy, setBusy] = useState(false);
@@ -314,6 +318,8 @@ function CampaignEditor({ lists, campaign, onClose }: { lists: ListT[]; campaign
         <div className="label mb-1">Call in these states ({states.length})</div>
         <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">{US.map((s) => <button key={s} type="button" onClick={() => toggleState(s)} className={`rounded px-2 py-1 text-xs border ${states.includes(s) ? "bg-[color:var(--brand)] text-white border-[color:var(--brand)]" : "border-[color:var(--line)]"}`}>{s}</button>)}</div>
       </div>
+
+      <label className="label">Route callbacks to (the campaign owner / call center)<input className="input" value={f.routingNumber} onChange={(e) => set("routingNumber", e.target.value)} placeholder="+1… — where live callbacks ring" /></label>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="label">After-hours message (played on callback)<textarea className="input" rows={2} value={f.afterHoursMessage} onChange={(e) => set("afterHoursMessage", e.target.value)} placeholder="Sorry, we're closed. Can we follow up during normal business hours?" /></label>

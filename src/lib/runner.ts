@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { acquireForCampaign } from "@/lib/numbers";
 import { campaignOpen } from "@/lib/outreach";
 import { sendCoreEmail } from "@/lib/core";
-import { jdiConfigured, jdiUploadAudioFromUrl, jdiCreateCampaign } from "@/lib/jdi";
+import { jdiConfigured, jdiUploadAudioFromUrl, jdiCreateCampaign, jdiOverview } from "@/lib/jdi";
 
 type Campaign = Awaited<ReturnType<typeof getCampaign>>;
 function getCampaign(id: string) { return db.outreachCampaign.findUnique({ where: { id } }); }
@@ -93,6 +93,15 @@ export async function tickCampaigns(now = new Date()): Promise<{ processed: numb
     if (voiceComplete && emailComplete && !c.finishedAt) {
       await db.outreachCampaign.update({ where: { id: c.id }, data: { finishedAt: new Date() } }).catch(() => {});
     }
+  }
+
+  // ---- Poll JDI for real delivery stats (delivered / filtered) → dashboard ----
+  const withJdi = await db.outreachCampaign.findMany({ where: { NOT: { jdiCampaignIds: "[]" } } });
+  for (const c of withJdi) {
+    const ids = parseIds(c.jdiCampaignIds);
+    let delivered = 0, filtered = 0;
+    for (const id of ids) { const ov = await jdiOverview(String(id)); if (ov) { delivered += Number(ov.delivered || 0); filtered += Number(ov.filtered || 0); } }
+    await db.outreachCampaign.update({ where: { id: c.id }, data: { deliveredCount: delivered, filteredCount: filtered } }).catch(() => {});
   }
   return { processed };
 }
