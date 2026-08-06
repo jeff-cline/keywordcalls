@@ -6,8 +6,9 @@ type CB = { phone: string; name: string; email: string; city: string; state: str
 type Target = { phone: string; name: string; email: string; city: string; state: string; calledBack: boolean; calledBackAt: string | null; landedAt: string; connectSec: number; billable: boolean; sentAt: string };
 type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string };
 type Data = {
-  campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; routingNumber: string; listCount: number; sentTotal: number; remaining: number } | null;
+  campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; routingNumber: string; listCount: number; sentTotal: number; remaining: number; combined?: boolean } | null;
   delivered: number; filtered: number; loaded: number; undelivered: number; inQueue: number; processing: boolean; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
+  tests: { id: string; name: string; rolloutGroup: string }[]; cap: { maxPerHour: number };
 };
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const mask = (n: string) => (n && n.length >= 4 ? `${n.slice(0, -4)}••${n.slice(-2)}` : n || "unknown");
@@ -23,9 +24,25 @@ export default function RolloutConsole() {
   const [sel, setSel] = useState<Target | null>(null);
   const [routeNum, setRouteNum] = useState("");
   const [routeSaved, setRouteSaved] = useState(false);
+  const [tab, setTab] = useState<string>("");            // "" = default (group A), "combined", or a campaignId
+  const [showAllSent, setShowAllSent] = useState(false); // sent (not-yet-called-back) rows past the first 10
+  const [addBusy, setAddBusy] = useState(false);
 
-  async function load() { const r = await fetch("/api/rollout/data"); if (r.ok) setD(await r.json()); }
-  useEffect(() => { load(); const id = setInterval(load, 5000); return () => clearInterval(id); }, []);
+  const tabQuery = tab === "combined" ? "?combined=1" : tab ? `?campaignId=${encodeURIComponent(tab)}` : "";
+  async function load() { const r = await fetch("/api/rollout/data" + tabQuery); if (r.ok) setD(await r.json()); }
+  useEffect(() => { load(); const id = setInterval(load, 5000); return () => clearInterval(id); }, [tab]); // eslint-disable-line
+
+  // Add a new lead-set test: upload a CSV → clones the current settings into a new A/B/C/D campaign.
+  async function addTest(file: File) {
+    setAddBusy(true); setMsg(null);
+    const fd = new FormData(); fd.append("file", file);
+    const r = await fetch("/api/rollout/addtest", { method: "POST", body: fd });
+    const j = await r.json().catch(() => ({}));
+    setAddBusy(false);
+    if (r.ok) { setMsg(`✓ Test ${j.group} created — ${j.count?.toLocaleString()} leads. Switch to its tab to launch.`); setTab(j.campaignId); load(); }
+    else setMsg(j.error || "Could not add test.");
+  }
+  const isCombined = !!d?.campaign?.combined;
   useEffect(() => { if (d?.campaign?.routingNumber && !routeNum) setRouteNum(d.campaign.routingNumber); }, [d]); // eslint-disable-line
   async function saveRoute() {
     if (!d?.campaign) return;
@@ -57,7 +74,7 @@ export default function RolloutConsole() {
   const rate = delivered ? billable / delivered : 0;        // BILLABLE calls (120s+) per delivered drop
   const perHour = t0 ? billable / elapsedH : 0;             // billable calls/hour (the goal metric)
   const neededSends = rate > 0 ? Math.ceil((parseFloat(goal) || 0) / rate) : 0; // drops to yield goal billable calls
-  const canLaunch = !!(d?.campaign?.hasAudio && d?.campaign?.routingNumber); // never send without a recording AND a callback number
+  const canLaunch = !!(d?.campaign?.hasAudio && d?.campaign?.routingNumber && !d?.campaign?.combined); // never send without a recording AND a callback number; the combined view is read-only
 
   // per-hour buckets since t0 (cap 48 bars)
   const { bars, cum } = useMemo(() => {
@@ -82,10 +99,34 @@ export default function RolloutConsole() {
   const midN = waits.filter((w) => w >= HOUR && w < 8 * HOUR).length;
   const longN = waits.filter((w) => w >= 8 * HOUR).length;
 
+  // Lead-set tabs: Original (A), then B/C/D tests, then All Combined. Green "Add Test" uploads a new list.
+  const tests = d?.tests || [];
+  const groupLabel = (g: string) => (g === "A" ? "Original (A)" : `${g} Test`);
+  const activeId = isCombined ? "combined" : d?.campaign?.id || "";
+
   return (
     <div className="space-y-6">
+      {/* Lead-set tabs */}
+      <div className="card p-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {tests.map((t) => (
+            <button key={t.id} onClick={() => { setTab(t.rolloutGroup === "A" ? "" : t.id); setShowAllSent(false); }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeId === t.id ? "bg-[color:var(--brand2)] text-white" : "bg-[color:var(--soft)] text-[color:var(--ink)]"}`}
+              title={t.name}>{groupLabel(t.rolloutGroup)}</button>
+          ))}
+          <button onClick={() => { setTab("combined"); setShowAllSent(false); }}
+            className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${isCombined ? "bg-[color:var(--brand2)] text-white" : "bg-[color:var(--soft)] text-[color:var(--ink)]"}`}>All Combined</button>
+          <div className="flex-1" />
+          <label className={`px-3 py-1.5 rounded-lg text-sm font-semibold cursor-pointer text-white ${addBusy ? "bg-gray-400" : "bg-[#16a34a] hover:bg-[#15803d]"}`}>
+            {addBusy ? "Uploading…" : "＋ Add Test"}
+            <input type="file" accept=".csv,text/csv" className="hidden" disabled={addBusy} onChange={(e) => { const f = e.target.files?.[0]; if (f) addTest(f); e.target.value = ""; }} />
+          </label>
+        </div>
+        <div className="text-[11px] text-[color:var(--muted)] mt-2">Each test is a separate lead file run with these exact settings — compare which list performs best. “All Combined” totals every test together.</div>
+      </div>
+
       {/* Record outbound voicemail — right here */}
-      {d?.campaign && (
+      {d?.campaign && !isCombined && (
         <div className="card p-6">
           <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)] mb-2">Outbound voicemail</div>
           {d.campaign.hasAudio && <div className="text-sm text-[color:#16a34a] mb-2">✓ Recorded — re-record any time below.</div>}
@@ -94,6 +135,7 @@ export default function RolloutConsole() {
       )}
 
       {/* Launch */}
+      {!isCombined && (
       <div className="card p-6">
         <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
           <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Launch batches — {d?.campaign?.name || "…"}</div>
@@ -111,9 +153,12 @@ export default function RolloutConsole() {
         <div className="mt-4 rounded-xl bg-[color:var(--soft)] p-4">
           <div className="text-sm font-semibold mb-2">Custom batch (Batch {(d?.batches.length || 0) + 1}) — {d?.campaign?.remaining.toLocaleString() || 0} leads left</div>
           <div className="flex flex-wrap items-end gap-3">
-            <label className="label">How many to send<input className="input !w-32" value={customAmt} onChange={(e) => setCustomAmt(e.target.value)} placeholder="e.g. 2500" /></label>
+            <label className="label">How many to send<input className="input !w-32" value={customAmt} onChange={(e) => setCustomAmt(e.target.value)} placeholder="e.g. 5000" /></label>
             <label className="label">Per hour (throttle)<input className="input !w-32" value={customThr} onChange={(e) => setCustomThr(e.target.value)} /></label>
             <button className="btn btn-primary !py-2.5" disabled={busy || !canLaunch} onClick={() => { const n = parseInt(customAmt, 10) || 0; if (n > 0) launch(n, parseInt(customThr, 10) || 1000, `Batch ${(d?.batches.length || 0) + 1} · ${n.toLocaleString()}`); }}>🚀 Go — custom</button>
+          </div>
+          <div className="text-[11px] text-[color:var(--muted)] mt-2">
+            <b>Physical cap:</b> your ringless account can deliver up to <b>{(d?.cap?.maxPerHour || 18000).toLocaleString()}/hour</b>. The real limit is prepaid credits (~1 per delivered drop). 5,000 over an hour is well within the cap.
           </div>
         </div>
 
@@ -130,6 +175,7 @@ export default function RolloutConsole() {
           {d?.campaign?.campaignNumber && <div className="text-xs text-[color:var(--muted)] mt-2">Your campaign line (the number people call back): {d.campaign.campaignNumber}</div>}
         </div>
       </div>
+      )}
 
       {/* Processing status */}
       <div className={`rounded-xl px-4 py-3 text-sm font-medium flex items-center gap-2 ${d?.processing ? "bg-amber-50 text-amber-800" : "bg-green-50 text-green-800"}`}>
@@ -250,20 +296,43 @@ export default function RolloutConsole() {
             <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Status</th><th className="py-2 px-4">Name</th><th className="py-2 px-4">Phone</th><th className="py-2 px-4">Location</th><th className="py-2 px-4">Landed at</th><th className="py-2 px-4">Talk time</th><th className="py-2 px-4">Response</th><th className="py-2 px-4">When</th></tr></thead>
             <tbody>
               {(!d?.targets || d.targets.length === 0) && <tr><td colSpan={8} className="py-6 px-4 text-[color:var(--muted)]">Numbers appear here as batches send. They turn green when they call back.</td></tr>}
-              {(d?.targets || []).map((t, i) => {
-                const wait = t.calledBack && t.calledBackAt ? new Date(t.calledBackAt).getTime() - new Date(t.sentAt).getTime() : -1;
+              {(() => {
+                const all = d?.targets || [];
+                const green = all.filter((t) => t.calledBack);
+                const notYet = all.filter((t) => !t.calledBack);
+                const greenCapped = green.slice(0, 100); // hard-cap green at the first 100
+                const sentShown = showAllSent ? notYet : notYet.slice(0, 10);
+                const row = (t: Target, i: number, key: string) => {
+                  const wait = t.calledBack && t.calledBackAt ? new Date(t.calledBackAt).getTime() - new Date(t.sentAt).getTime() : -1;
+                  return (
+                    <tr key={key} className={`border-b border-[color:var(--line)] last:border-0 ${t.calledBack ? "bg-[#16a34a]/10 cursor-pointer hover:bg-[#16a34a]/20" : ""}`} onClick={t.calledBack ? () => setSel(t) : undefined}>
+                      <td className="py-2 px-4">{t.calledBack ? <span className="rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5">📞 Called back</span> : <span className="text-[color:var(--muted)] text-xs">sent</span>}</td>
+                      <td className="py-2 px-4 font-medium">{t.name || <span className="text-[color:var(--muted)]">unknown</span>}</td>
+                      <td className="py-2 px-4">{mask(t.phone)}</td>
+                      <td className="py-2 px-4 text-[color:var(--muted)]">{[t.city, t.state].filter(Boolean).join(", ") || "—"}</td>
+                      <td className="py-2 px-4">{t.landedAt ? t.landedAt : t.calledBack ? <span className="text-amber-700 text-xs">no route set</span> : <span className="text-[color:var(--muted)]">—</span>}</td>
+                      <td className="py-2 px-4">{t.connectSec ? <span className={t.connectSec >= 120 ? "text-[color:#16a34a] font-bold" : "text-[color:var(--ink)]"}>{mmss(t.connectSec)}</span> : <span className="text-[color:var(--muted)]">—</span>}</td>
+                      <td className="py-2 px-4 text-[color:var(--muted)]">{wait >= 0 ? fmtWait(wait) : "—"}</td>
+                      <td className="py-2 px-4 text-[color:var(--muted)] whitespace-nowrap">{t.calledBackAt ? new Date(t.calledBackAt).toLocaleTimeString() : "—"}</td>
+                    </tr>
+                  );
+                };
                 return (
-                <tr key={i} className={`border-b border-[color:var(--line)] last:border-0 ${t.calledBack ? "bg-[#16a34a]/10 cursor-pointer hover:bg-[#16a34a]/20" : ""}`} onClick={t.calledBack ? () => setSel(t) : undefined}>
-                  <td className="py-2 px-4">{t.calledBack ? <span className="rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5">📞 Called back</span> : <span className="text-[color:var(--muted)] text-xs">sent</span>}</td>
-                  <td className="py-2 px-4 font-medium">{t.name || <span className="text-[color:var(--muted)]">unknown</span>}</td>
-                  <td className="py-2 px-4">{mask(t.phone)}</td>
-                  <td className="py-2 px-4 text-[color:var(--muted)]">{[t.city, t.state].filter(Boolean).join(", ") || "—"}</td>
-                  <td className="py-2 px-4">{t.landedAt ? t.landedAt : t.calledBack ? <span className="text-amber-700 text-xs">no route set</span> : <span className="text-[color:var(--muted)]">—</span>}</td>
-                  <td className="py-2 px-4">{t.connectSec ? <span className={t.connectSec >= 120 ? "text-[color:#16a34a] font-bold" : "text-[color:var(--ink)]"}>{mmss(t.connectSec)}</span> : <span className="text-[color:var(--muted)]">—</span>}</td>
-                  <td className="py-2 px-4 text-[color:var(--muted)]">{wait >= 0 ? fmtWait(wait) : "—"}</td>
-                  <td className="py-2 px-4 text-[color:var(--muted)] whitespace-nowrap">{t.calledBackAt ? new Date(t.calledBackAt).toLocaleTimeString() : "—"}</td>
-                </tr>
-              ); })}
+                  <>
+                    {greenCapped.map((t, i) => row(t, i, `g${i}`))}
+                    {green.length > 100 && (
+                      <tr><td colSpan={8} className="py-2 px-4 text-xs text-[color:var(--muted)] bg-[#16a34a]/5">Showing the first 100 of {green.length.toLocaleString()} callbacks.</td></tr>
+                    )}
+                    {sentShown.map((t, i) => row(t, i, `s${i}`))}
+                    {!showAllSent && notYet.length > 10 && (
+                      <tr><td colSpan={8} className="py-2 px-4 text-center"><button className="text-sm font-semibold text-[color:var(--brand2)] hover:underline" onClick={() => setShowAllSent(true)}>Show more ({(notYet.length - 10).toLocaleString()} more sent)</button></td></tr>
+                    )}
+                    {showAllSent && notYet.length > 10 && (
+                      <tr><td colSpan={8} className="py-2 px-4 text-center"><button className="text-sm font-semibold text-[color:var(--muted)] hover:underline" onClick={() => setShowAllSent(false)}>Show less</button></td></tr>
+                    )}
+                  </>
+                );
+              })()}
             </tbody>
           </table>
         </div>
