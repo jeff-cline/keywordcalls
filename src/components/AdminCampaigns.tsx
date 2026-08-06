@@ -8,7 +8,7 @@ type Row = {
   states: string[]; bidCents: number; hoursStart: string; hoursEnd: string; tz: string;
   outboundAudioUrl: string; followupAudioUrl: string; afterHoursMessage: string; followupMessage: string;
   mode: string; emailDelayMin: number; callsPerMin: number; emailSubject: string; emailBody: string;
-  dialedCount: number; connectedCount: number; revenueCents: number; createdAt: string;
+  dialedCount: number; connectedCount: number; revenueCents: number; startedAt: string | null; finishedAt: string | null; createdAt: string;
 };
 type Readiness = {
   mailboxes: number; mailboxDailyCap: number; emailsPerDay: number; sendWindowHours: number; emailsPerHour: number;
@@ -61,15 +61,19 @@ export default function AdminCampaigns({ lists, rows, readiness }: { lists: List
       {tab !== "readiness" && <div className="card p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Campaign</th><th className="py-2 px-4">Revenue</th><th className="py-2 px-4">List</th><th className="py-2 px-4">Dialed</th><th className="py-2 px-4">Status</th><th className="py-2 px-4">Actions</th></tr></thead>
+            <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Campaign</th><th className="py-2 px-4">Revenue</th><th className="py-2 px-4">List</th><th className="py-2 px-4">Dialed</th><th className="py-2 px-4">Started / Finished</th><th className="py-2 px-4">Status</th><th className="py-2 px-4">Actions</th></tr></thead>
             <tbody>
-              {filtered.length === 0 && <tr><td colSpan={6} className="py-6 px-4 text-[color:var(--muted)]">No campaigns{q ? " match your search" : " yet"}.</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={7} className="py-6 px-4 text-[color:var(--muted)]">No campaigns{q ? " match your search" : " yet"}.</td></tr>}
               {filtered.map((c) => (
                 <tr key={c.id} className="border-b border-[color:var(--line)] last:border-0 align-top">
                   <td className="py-2 px-4"><div className="font-medium">{c.name}</div><div className="text-xs text-[color:var(--muted)]">{c.states.length} states · {usd(c.bidCents)}/call · {c.hoursStart}–{c.hoursEnd} {c.tz.split("/")[1]?.replace("_", " ")}</div></td>
                   <td className="py-2 px-4 font-bold">{usd(c.revenueCents)}</td>
                   <td className="py-2 px-4">{c.listName || "—"}<div className="text-xs text-[color:var(--muted)]">{c.listCount.toLocaleString()} contacts</div></td>
-                  <td className="py-2 px-4">{c.dialedCount.toLocaleString()}</td>
+                  <td className="py-2 px-4">{c.dialedCount.toLocaleString()}{c.listCount ? <div className="text-xs text-[color:var(--muted)]">of {c.listCount.toLocaleString()}</div> : null}</td>
+                  <td className="py-2 px-4 text-xs text-[color:var(--muted)] whitespace-nowrap">
+                    <div>▶ {c.startedAt ? new Date(c.startedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</div>
+                    <div>✓ {c.finishedAt ? new Date(c.finishedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : c.status === "on" ? "running…" : "—"}</div>
+                  </td>
                   <td className="py-2 px-4"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${c.status === "on" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"}`}>{c.status === "on" ? "● ON" : "OFF"}</span></td>
                   <td className="py-2 px-4">
                     <div className="flex flex-wrap gap-1">

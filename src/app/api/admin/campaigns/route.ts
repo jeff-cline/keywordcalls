@@ -52,7 +52,7 @@ export async function PATCH(req: NextRequest) {
       const setup = campaignSetup(c);
       if (!setup.ok) return NextResponse.json({ error: `Finish setup first — missing: ${setup.missing.join(", ")}.` }, { status: 400 });
     }
-    await db.outreachCampaign.update({ where: { id }, data: { status: turningOn ? "on" : "off" } });
+    await db.outreachCampaign.update({ where: { id }, data: turningOn ? { status: "on", startedAt: new Date(), finishedAt: null } : { status: "off" } });
     return NextResponse.json({ ok: true, status: turningOn ? "on" : "off" });
   }
   if (action === "duplicate") {

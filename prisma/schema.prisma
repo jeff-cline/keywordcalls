@@ -154,6 +154,8 @@ model OutreachCampaign {
   dialedCount       Int       @default(0)
   connectedCount    Int       @default(0)
   revenueCents      Int       @default(0)
+  startedAt         DateTime? // when the campaign was last turned on
+  finishedAt        DateTime? // when it completed its full list
   createdAt         DateTime  @default(now())
   @@map("outreach_campaign")
 }

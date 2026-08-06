@@ -39,6 +39,8 @@ export default async function AdminCampaignsPage() {
     mode: c.mode, emailDelayMin: c.emailDelayMin, callsPerMin: c.callsPerMin,
     emailSubject: c.emailSubject, emailBody: c.emailBody,
     dialedCount: c.dialedCount, connectedCount: c.connectedCount, revenueCents: c.revenueCents,
+    startedAt: c.startedAt ? c.startedAt.toISOString() : null,
+    finishedAt: c.finishedAt ? c.finishedAt.toISOString() : null,
     createdAt: c.createdAt.toISOString(),
   }));
 
