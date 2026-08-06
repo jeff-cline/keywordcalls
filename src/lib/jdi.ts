@@ -91,7 +91,7 @@ export async function jdiCreateCampaign(opts: {
     cName: opts.name.slice(0, 25) || "KWC Campaign",
     cWav: opts.wavUrl,
     cCallback: opts.callback,
-    cNumbers: opts.numbers.map((n) => n.replace(/\D/g, "")),
+    cNumbers: opts.numbers.map((n) => n.replace(/\D/g, "")).filter(Boolean).join(","), // comma-separated string, not an array
     cStateCheck: true,   // LRN state/carrier filtering — compliance
     cPerformance: true,  // skip known-unreceptive destinations
     cStart: opts.autoStart !== false,
