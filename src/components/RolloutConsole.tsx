@@ -97,6 +97,16 @@ export default function RolloutConsole() {
     setRouteSaved(r.ok);
   }
 
+  const [testNum, setTestNum] = useState("");
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+  async function testBuyerLine() {
+    if (!d?.campaign) return;
+    setTestMsg("Calling you now…");
+    const r = await fetch("/api/rollout/testcall", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ campaignId: d.campaign.id, to: testNum }) });
+    const j = await r.json().catch(() => ({}));
+    setTestMsg(r.ok ? `📞 Ringing ${j.to} — answer it, and it'll dial your buyer line ${j.routingNumber}. If the buyer picks up, you can talk.` : (j.error || "Could not place the test call."));
+  }
+
   async function launch(size: number, throttle: number, label: string) {
     if (!d?.campaign) return;
     if (!confirm(`Launch ${size} REAL ringless voicemails now (throttled to ${throttle}/hr)?`)) return;
@@ -306,6 +316,16 @@ export default function RolloutConsole() {
             {routeSaved && <span className="text-xs text-green-700">✓ callbacks will ring this number</span>}
           </div>
           {d?.campaign?.campaignNumber && <div className="text-xs text-[color:var(--muted)] mt-2">Your campaign line (the number people call back): {d.campaign.campaignNumber}</div>}
+          {/* Test the buyer line — rings your phone, then dials the buyer exactly like a real callback */}
+          <div className="mt-3 pt-3 border-t border-[color:var(--line)]">
+            <div className="text-sm font-semibold mb-1">🧪 Test the buyer line — confirm it rings a live person</div>
+            <div className="text-xs text-[color:var(--muted)] mb-2">We&apos;ll call your phone; answer it and it dials {d?.campaign?.routingNumber || "the buyer"} just like a real callback. If they pick up, you can talk.</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input className="input !w-48" value={testNum} onChange={(e) => { setTestNum(e.target.value); setTestMsg(null); }} placeholder="+1… your phone / laptop #" />
+              <button className="btn !bg-[color:#16a34a] text-white !border-0 !py-2" disabled={!testNum} onClick={testBuyerLine}>📞 Call me to test</button>
+            </div>
+            {testMsg && <div className="text-sm text-green-700 mt-2">{testMsg}</div>}
+          </div>
         </div>
       </div>
       )}
