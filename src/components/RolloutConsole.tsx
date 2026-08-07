@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import RecordButton from "@/components/RecordButton";
 
 type CB = { phone: string; name: string; email: string; city: string; state: string; landedAt: string; connectSec: number; billable: boolean; at: string };
@@ -34,6 +34,16 @@ export default function RolloutConsole() {
   const [addFile, setAddFile] = useState<File | null>(null);
   const [ah, setAh] = useState<AhData | null>(null);      // After Hours Callback view data
   const [redropBusy, setRedropBusy] = useState(false);
+  const recAudio = useRef<HTMLAudioElement | null>(null); // one shared player for the tiny row ▶ buttons
+
+  // Play the exact recovery voicemail (same clip every row) — no per-row <audio>, so rows stay tiny.
+  function playRecovery() {
+    const url = ah?.template?.afterHoursAudioUrl;
+    if (!url) return;
+    if (!recAudio.current) recAudio.current = new Audio(url);
+    recAudio.current.src = url; recAudio.current.currentTime = 0;
+    recAudio.current.play().catch(() => {});
+  }
 
   const tabQuery = tab === "combined" ? "?combined=1" : tab ? `?campaignId=${encodeURIComponent(tab)}` : "";
   async function load() {
@@ -219,7 +229,7 @@ export default function RolloutConsole() {
                       <td className="py-2 px-4 font-medium">{r.name || <span className="text-[color:var(--muted)]">unknown</span>}</td>
                       <td className="py-2 px-4">{mask(r.phone)}</td>
                       <td className="py-2 px-4 text-[color:var(--muted)]">{[r.city, r.state].filter(Boolean).join(", ") || "—"}</td>
-                      <td className="py-2 px-4">{r.redropped ? <span className="text-[color:#16a34a] font-semibold">♻️ Re-dropped{r.redroppedAt ? ` ${new Date(r.redroppedAt).toLocaleDateString()}` : ""}</span> : <span className="text-amber-700 text-xs">pending 10 AM</span>}</td>
+                      <td className="py-2 px-4"><span className="inline-flex items-center gap-1.5">{r.redropped ? <span className="text-[color:#16a34a] font-semibold">♻️ Re-dropped{r.redroppedAt ? ` ${new Date(r.redroppedAt).toLocaleDateString()}` : ""}</span> : <span className="text-amber-700 text-xs">pending 10 AM</span>}{ah?.template?.hasAfterHoursAudio && <button onClick={playRecovery} title="Hear the recovery voicemail that will be sent" className="text-[color:var(--brand2)] hover:opacity-70 text-[11px] leading-none">▶</button>}</span></td>
                       <td className="py-2 px-4 text-[color:var(--muted)] whitespace-nowrap">{new Date(r.at).toLocaleString()}</td>
                     </tr>
                   ))}
