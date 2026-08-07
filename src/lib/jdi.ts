@@ -111,3 +111,15 @@ export async function jdiOverview(campaignId: string): Promise<any | null> {
   const r = await jdi(`/api/campaigns/overview/${campaignId}`);
   return r.ok ? r.data : null;
 }
+
+// Pause an active campaign — HOLDS the hopper (queued numbers wait). Reversible with jdiResume.
+// (Do NOT use stop — that clears the hopper permanently.)
+export async function jdiPause(campaignId: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await jdi(`/api/campaigns/pause/${campaignId}`, { method: "POST" });
+  return { ok: r.ok, error: r.error };
+}
+// Resume a paused campaign — the held hopper starts delivering again.
+export async function jdiResume(campaignId: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await jdi(`/api/campaigns/start/${campaignId}`, { method: "POST" });
+  return { ok: r.ok, error: r.error };
+}

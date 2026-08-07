@@ -166,6 +166,7 @@ model OutreachCampaign {
   cursor            String    @default("") // last processed ListContact id (paced runner)
   rolloutCursor     String    @default("") // last ListContact id sent via a manual /rollout batch
   rolloutGroup      String    @default("") // A/B/C/D lead-set test group for the /rollout console
+  paused            Boolean   @default(false) // God paused this campaign's ringless drops (hopper held)
   jdiWav            String    @default("") // recording uploaded to JDI (ringless audio URL)
   jdiCampaignIds    String    @default("[]") // JSON array of JDI ringless campaign ids
   jdiDone           Boolean   @default(false) // voice list fully handed to JDI

@@ -21,8 +21,8 @@ export async function GET(req: NextRequest) {
   if (afterhours) {
     const template = (await db.outreachCampaign.findFirst({ where: { rolloutGroup: "A" } })) || (await db.outreachCampaign.findFirst({ orderBy: { createdAt: "asc" } }));
     const [missed, pending, recovered] = await Promise.all([
-      db.campaignCallback.findMany({ where: { outcome: { in: ["after_hours", "no_answer"] } }, orderBy: { at: "desc" }, take: 500 }),
-      db.campaignCallback.count({ where: { outcome: { in: ["after_hours", "no_answer"] }, redropped: false } }),
+      db.campaignCallback.findMany({ where: { outcome: { in: ["after_hours", "no_answer", "no_route"] } }, orderBy: { at: "desc" }, take: 500 }),
+      db.campaignCallback.count({ where: { outcome: { in: ["after_hours", "no_answer", "no_route"] }, redropped: false } }),
       db.campaignCallback.count({ where: { redropped: true } }),
     ]);
     return NextResponse.json({
@@ -69,8 +69,8 @@ export async function GET(req: NextRequest) {
   const sent = batches.reduce((a, b) => a + b.size, 0);
   const one = camps[0];
   const campaign = combined
-    ? { id: "", name: "All Combined", hasAudio: false, campaignNumber: "", routingNumber: "combined", listCount: totalList, sentTotal: sent, remaining: Math.max(0, totalList - sent), combined: true }
-    : { id: one.id, name: one.name, hasAudio: !!one.outboundAudioUrl, campaignNumber: one.campaignNumber, routingNumber: one.routingNumber, listCount: totalList, sentTotal: sent, remaining: Math.max(0, totalList - sent), combined: false };
+    ? { id: "", name: "All Combined", hasAudio: false, campaignNumber: "", routingNumber: "combined", listCount: totalList, sentTotal: sent, remaining: Math.max(0, totalList - sent), combined: true, paused: false }
+    : { id: one.id, name: one.name, hasAudio: !!one.outboundAudioUrl, campaignNumber: one.campaignNumber, routingNumber: one.routingNumber, listCount: totalList, sentTotal: sent, remaining: Math.max(0, totalList - sent), combined: false, paused: one.paused };
 
   return NextResponse.json({
     ok: true, campaign, tests, cap: { maxPerHour: CAP_PER_HOUR },

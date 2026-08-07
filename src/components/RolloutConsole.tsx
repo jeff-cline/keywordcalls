@@ -6,7 +6,7 @@ type CB = { phone: string; name: string; email: string; city: string; state: str
 type Target = { phone: string; name: string; email: string; city: string; state: string; calledBack: boolean; calledBackAt: string | null; landedAt: string; connectSec: number; billable: boolean; sentAt: string };
 type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string };
 type Data = {
-  campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; routingNumber: string; listCount: number; sentTotal: number; remaining: number; combined?: boolean } | null;
+  campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; routingNumber: string; listCount: number; sentTotal: number; remaining: number; combined?: boolean; paused?: boolean } | null;
   delivered: number; filtered: number; loaded: number; undelivered: number; inQueue: number; processing: boolean; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
   tests: { id: string; name: string; rolloutGroup: string }[]; cap: { maxPerHour: number };
 };
@@ -41,6 +41,18 @@ export default function RolloutConsole() {
     const r = await fetch("/api/rollout/data" + tabQuery); if (r.ok) setD(await r.json());
   }
   useEffect(() => { load(); const id = setInterval(load, 5000); return () => clearInterval(id); }, [tab]); // eslint-disable-line
+
+  async function togglePause() {
+    if (!d?.campaign) return;
+    const resume = !!d.campaign.paused;
+    if (!confirm(resume ? "Resume this campaign? Held drops will start sending again." : "Pause this campaign? Queued drops will hold until you unpause.")) return;
+    setBusy(true); setMsg(null);
+    const r = await fetch("/api/rollout/pause", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ campaignId: d.campaign.id, action: resume ? "resume" : "pause" }) });
+    const j = await r.json().catch(() => ({}));
+    setBusy(false);
+    setMsg(r.ok ? (j.paused ? `⏸️ Paused — ${j.affected} batch(es) held.` : `▶️ Resumed — ${j.affected} batch(es) sending.`) : (j.error || "Failed."));
+    load();
+  }
 
   async function runRedrop() {
     if (!confirm("Send the recovery voicemail now to everyone who hasn't been re-dropped yet?")) return;
@@ -97,7 +109,7 @@ export default function RolloutConsole() {
   const rate = delivered ? billable / delivered : 0;        // BILLABLE calls (120s+) per delivered drop
   const perHour = t0 ? billable / elapsedH : 0;             // billable calls/hour (the goal metric)
   const neededSends = rate > 0 ? Math.ceil((parseFloat(goal) || 0) / rate) : 0; // drops to yield goal billable calls
-  const canLaunch = !!(d?.campaign?.hasAudio && d?.campaign?.routingNumber && !d?.campaign?.combined); // never send without a recording AND a callback number; the combined view is read-only
+  const canLaunch = !!(d?.campaign?.hasAudio && d?.campaign?.routingNumber && !d?.campaign?.combined && !d?.campaign?.paused); // never send without a recording AND a callback number; not while paused or on the combined view
 
   // per-hour buckets since t0 (cap 48 bars)
   const { bars, cum } = useMemo(() => {
@@ -212,8 +224,17 @@ export default function RolloutConsole() {
       <div className="card p-6">
         <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
           <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Launch batches — {d?.campaign?.name || "…"}</div>
-          <div className="text-xs text-[color:var(--muted)]">{d?.campaign ? `${sent.toLocaleString()} sent · ${d.campaign.remaining.toLocaleString()} left in list` : ""}</div>
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-[color:var(--muted)]">{d?.campaign ? `${sent.toLocaleString()} sent · ${d.campaign.remaining.toLocaleString()} left in list` : ""}</div>
+            {d?.campaign && (
+              <button onClick={togglePause} disabled={busy}
+                className={`px-3 py-1.5 rounded-lg text-sm font-bold text-white ${d.campaign.paused ? "bg-[color:#16a34a] hover:bg-[color:#15803d]" : "bg-[color:#dc2626] hover:bg-[color:#b91c1c]"}`}>
+                {d.campaign.paused ? "▶️ Resume campaign" : "⏸️ Pause campaign"}
+              </button>
+            )}
+          </div>
         </div>
+        {d?.campaign?.paused && <div className="text-sm font-semibold text-[color:#dc2626] mb-3 rounded-lg bg-red-50 px-3 py-2">⏸️ This campaign is PAUSED — queued drops are holding. Resume to continue sending.</div>}
         {!d?.campaign?.hasAudio && <div className="text-sm text-amber-700 mb-3">⚠️ Record the outbound voicemail above before launching.</div>}
         {!d?.campaign?.routingNumber && <div className="text-sm text-amber-700 mb-3">⚠️ Set a callback number below — nothing can launch without one.</div>}
         <div className="grid gap-3 sm:grid-cols-3">

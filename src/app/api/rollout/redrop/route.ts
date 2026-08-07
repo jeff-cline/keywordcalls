@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   let totalSent = 0; const perCampaign: { campaign: string; sent: number; note?: string }[] = [];
 
   for (const c of camps) {
-    const pending = await db.campaignCallback.findMany({ where: { campaignId: c.id, outcome: { in: ["after_hours", "no_answer"] }, redropped: false } });
+    const pending = await db.campaignCallback.findMany({ where: { campaignId: c.id, outcome: { in: ["after_hours", "no_answer", "no_route"] }, redropped: false } });
     if (pending.length === 0) continue;
     if (!c.afterHoursAudioUrl) { perCampaign.push({ campaign: c.name, sent: 0, note: "no after-hours recording" }); continue; }
     if (!c.campaignNumber) { perCampaign.push({ campaign: c.name, sent: 0, note: "no callback number" }); continue; }
