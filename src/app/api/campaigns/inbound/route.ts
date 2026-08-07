@@ -35,8 +35,12 @@ export async function POST(req: NextRequest) {
     // Real caller shown. The Dial `action` posts back the talk time → we record connectSec and bill at
     // 120s+, or (if the buyer doesn't answer) flag the lead + play the after-hours reminder.
     const callerAttr = from ? ` callerId="${from}"` : "";
-    const action = `https://keywordcalls.com/api/campaigns/dial-status?cb=${encodeURIComponent(cb?.id || "")}`;
-    return xml(`<Dial${callerAttr} timeout="25" action="${action}" method="POST"><Number>${dest}</Number></Dial>`);
+    const cbId = encodeURIComponent(cb?.id || "");
+    const action = `https://keywordcalls.com/api/campaigns/dial-status?cb=${cbId}`;
+    const recCb = `https://keywordcalls.com/api/campaigns/recording?cb=${cbId}`;
+    // record="record-from-ringing-dual" captures both legs from the ring, so you can hear the transfer
+    // itself + what's said — even on short calls. Recording URL is posted back when it finalizes.
+    return xml(`<Dial${callerAttr} timeout="25" action="${action}" method="POST" record="record-from-ringing-dual" recordingStatusCallback="${recCb}" recordingStatusCallbackEvent="completed"><Number>${dest}</Number></Dial>`);
   }
   // No routing number set → can't connect. Capture the lead for the 10am re-drop and play the reminder.
   if (c.afterHoursAudioUrl) return xml(`<Play>${esc(c.afterHoursAudioUrl)}</Play><Hangup/>`);

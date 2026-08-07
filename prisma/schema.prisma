@@ -231,6 +231,7 @@ model RolloutTarget {
   landedAt     String    @default("") // number the callback was routed to
   connectSec   Int       @default(0)
   billable     Boolean   @default(false)
+  recordingUrl String    @default("") // Twilio recording of the transfer (dual-leg, from ringing)
   at           DateTime  @default(now()) // when it was sent (batch launch)
   @@index([campaignId, calledBack])
   @@index([campaignId, phone])
@@ -266,6 +267,7 @@ model CampaignCallback {
   outcome    String   @default("") // connected | after_hours | no_answer | abandoned
   redropped  Boolean  @default(false) // a 10am recovery voicemail was sent to this lead
   redroppedAt DateTime?
+  recordingUrl String @default("") // Twilio recording of the transfer call (dual-leg, from ringing)
   at         DateTime @default(now())
   @@index([campaignId, at])
   @@index([outcome, redropped])

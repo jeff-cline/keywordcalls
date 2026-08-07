@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
   const listCounts = await Promise.all(camps.map((c) => c.listId ? db.listContact.count({ where: { listId: c.listId } }) : Promise.resolve(0)));
   const totalList = listCounts.reduce((a, b) => a + b, 0);
 
-  const targets = [...green, ...recent].map((t) => ({ phone: t.phone, name: t.name, email: t.email, city: t.city, state: t.state, calledBack: t.calledBack, calledBackAt: t.calledBackAt, landedAt: t.landedAt, connectSec: t.connectSec, billable: t.billable, sentAt: t.at }));
+  const targets = [...green, ...recent].map((t) => ({ phone: t.phone, name: t.name, email: t.email, city: t.city, state: t.state, calledBack: t.calledBack, calledBackAt: t.calledBackAt, landedAt: t.landedAt, connectSec: t.connectSec, billable: t.billable, recordingUrl: t.recordingUrl, sentAt: t.at }));
 
   // Live delivery funnel across all batches (best-effort, from JDI). Also capture per-batch status.
   let delivered = 0, filtered = 0, loaded = 0, undelivered = 0, inQueue = 0, processing = false;

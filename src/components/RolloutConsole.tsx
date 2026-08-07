@@ -4,7 +4,7 @@ import RecordButton from "@/components/RecordButton";
 import BuyerTestCall from "@/components/BuyerTestCall";
 
 type CB = { phone: string; name: string; email: string; city: string; state: string; landedAt: string; connectSec: number; billable: boolean; at: string };
-type Target = { phone: string; name: string; email: string; city: string; state: string; calledBack: boolean; calledBackAt: string | null; landedAt: string; connectSec: number; billable: boolean; sentAt: string };
+type Target = { phone: string; name: string; email: string; city: string; state: string; calledBack: boolean; calledBackAt: string | null; landedAt: string; connectSec: number; billable: boolean; recordingUrl?: string; sentAt: string };
 type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string; status: string; delivered: number; hopper: number };
 type Data = {
   campaign: { id: string; name: string; hasAudio: boolean; outboundAudioUrl?: string; campaignNumber: string; routingNumber: string; listCount: number; sentTotal: number; remaining: number; combined?: boolean; paused?: boolean } | null;
@@ -42,8 +42,12 @@ export default function RolloutConsole() {
   // Play the exact recovery voicemail (same clip every row) — no per-row <audio>, so rows stay tiny.
   function playRecovery() {
     const url = ah?.template?.afterHoursAudioUrl;
-    if (!url) return;
-    if (!recAudio.current) recAudio.current = new Audio(url);
+    if (url) playRecordingUrl(url);
+  }
+  // Shared player for any recording URL (recovery clip or a callback-transfer recording).
+  function playRecordingUrl(url: string) {
+    if (!recAudio.current) recAudio.current = new Audio();
+    try { recAudio.current.pause(); } catch {}
     recAudio.current.src = url; recAudio.current.currentTime = 0;
     recAudio.current.play().catch(() => {});
   }
@@ -473,7 +477,7 @@ export default function RolloutConsole() {
                       <td className="py-2 px-4">{mask(t.phone)}</td>
                       <td className="py-2 px-4 text-[color:var(--muted)]">{[t.city, t.state].filter(Boolean).join(", ") || "—"}</td>
                       <td className="py-2 px-4">{t.landedAt ? t.landedAt : t.calledBack ? <span className="text-amber-700 text-xs">no route set</span> : <span className="text-[color:var(--muted)]">—</span>}</td>
-                      <td className="py-2 px-4">{t.connectSec ? <span className={t.connectSec >= 120 ? "text-[color:#16a34a] font-bold" : "text-[color:var(--ink)]"}>{mmss(t.connectSec)}</span> : <span className="text-[color:var(--muted)]">—</span>}</td>
+                      <td className="py-2 px-4"><span className="inline-flex items-center gap-1.5">{t.connectSec ? <span className={t.connectSec >= 120 ? "text-[color:#16a34a] font-bold" : "text-[color:var(--ink)]"}>{mmss(t.connectSec)}</span> : <span className="text-[color:var(--muted)]">—</span>}{t.recordingUrl && <button onClick={(e) => { e.stopPropagation(); playRecordingUrl(`/api/campaigns/recording-audio?phone=${encodeURIComponent(t.phone)}`); }} title="Hear this call (transfer + conversation)" className="text-[color:var(--brand2)] hover:opacity-70 text-[11px] leading-none">▶</button>}</span></td>
                       <td className="py-2 px-4 text-[color:var(--muted)]">{wait >= 0 ? fmtWait(wait) : "—"}</td>
                       <td className="py-2 px-4 text-[color:var(--muted)] whitespace-nowrap">{t.calledBackAt ? new Date(t.calledBackAt).toLocaleTimeString() : "—"}</td>
                     </tr>
@@ -540,6 +544,7 @@ export default function RolloutConsole() {
               <div><b>Response time:</b> {sel.calledBackAt ? fmtWait(new Date(sel.calledBackAt).getTime() - new Date(sel.sentAt).getTime()) : "—"}</div>
               <div><b>Landed at (routed to):</b> {sel.landedAt || <span className="text-amber-700">no routing number was set</span>}</div>
               <div><b>Talk time:</b> {sel.connectSec ? <span className={sel.connectSec >= 120 ? "text-[color:#16a34a] font-bold" : ""}>{mmss(sel.connectSec)}{sel.billable ? " · billable (120s+)" : ""}</span> : "—"}</div>
+              <div className="pt-2 border-t border-[color:var(--line)] mt-2"><b>Call recording:</b> {sel.recordingUrl ? <audio controls preload="none" src={`/api/campaigns/recording-audio?phone=${encodeURIComponent(sel.phone)}`} className="w-full h-9 mt-1" /> : <span className="text-[color:var(--muted)]"> not ready yet (appears a few seconds after the call)</span>}</div>
             </div>
           </div>
         </div>
