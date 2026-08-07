@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, isGod } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { jdiOverview } from "@/lib/jdi";
+import { campaignOpen } from "@/lib/outreach";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,13 +70,17 @@ export async function GET(req: NextRequest) {
 
   const sent = batches.reduce((a, b) => a + b.size, 0);
   const one = camps[0];
+  // Live send state: drops only happen inside the campaign's hours, with an active non-empty queue,
+  // and not paused. This is the top-of-page "SENDING NOW vs safe-to-change" signal.
+  const withinWindow = !combined && one ? campaignOpen(one) : false;
+  const sendingNow = withinWindow && processing && inQueue > 0 && !(one && "paused" in one && one.paused);
   const campaign = combined
     ? { id: "", name: "All Combined", hasAudio: false, campaignNumber: "", routingNumber: "combined", listCount: totalList, sentTotal: sent, remaining: Math.max(0, totalList - sent), combined: true, paused: false }
     : { id: one.id, name: one.name, hasAudio: !!one.outboundAudioUrl, campaignNumber: one.campaignNumber, routingNumber: one.routingNumber, listCount: totalList, sentTotal: sent, remaining: Math.max(0, totalList - sent), combined: false, paused: one.paused };
 
   return NextResponse.json({
     ok: true, campaign, tests, cap: { maxPerHour: CAP_PER_HOUR },
-    delivered, filtered, loaded, undelivered, inQueue, processing, sentCount, calledBackCount, billableCount,
+    delivered, filtered, loaded, undelivered, inQueue, processing, sendingNow, withinWindow, sentCount, calledBackCount, billableCount,
     batches: batches.map((b) => ({ id: b.id, label: b.label, size: b.size, throttle: b.throttle, launchedAt: b.launchedAt, status: batchInfo[b.id]?.status || "", delivered: batchInfo[b.id]?.delivered || 0, hopper: batchInfo[b.id]?.hopper || 0 })),
     targets,
     callbacks: callbacks.map((cb) => ({ phone: cb.phone, name: cb.name, email: cb.email, city: cb.city, state: cb.state, landedAt: cb.landedAt, connectSec: cb.connectSec, billable: cb.billable, at: cb.at })),

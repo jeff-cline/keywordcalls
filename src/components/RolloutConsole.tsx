@@ -7,7 +7,7 @@ type Target = { phone: string; name: string; email: string; city: string; state:
 type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string; status: string; delivered: number; hopper: number };
 type Data = {
   campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; routingNumber: string; listCount: number; sentTotal: number; remaining: number; combined?: boolean; paused?: boolean } | null;
-  delivered: number; filtered: number; loaded: number; undelivered: number; inQueue: number; processing: boolean; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
+  delivered: number; filtered: number; loaded: number; undelivered: number; inQueue: number; processing: boolean; sendingNow?: boolean; withinWindow?: boolean; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
   tests: { id: string; name: string; rolloutGroup: string }[]; cap: { maxPerHour: number };
 };
 type AhRow = { phone: string; name: string; email: string; city: string; state: string; outcome: string; redropped: boolean; redroppedAt: string | null; at: string };
@@ -144,8 +144,22 @@ export default function RolloutConsole() {
   };
   const activeId = isCombined ? "combined" : d?.campaign?.id || "";
 
+  const sending = !!d?.sendingNow;
+  const liveText = sending
+    ? `SENDING NOW${d?.inQueue ? ` — ${d.inQueue.toLocaleString()} in the queue` : ""}`
+    : d?.campaign?.paused ? "PAUSED — safe to make changes"
+    : d?.withinWindow === false ? "Outside sending hours — safe to make changes"
+    : "Idle — nothing sending right now — safe to make changes";
+
   return (
     <div className="space-y-6">
+      {/* Live sending indicator — sticky so you always know if it's safe to change things */}
+      <div className={`sticky top-0 z-40 -mx-1 rounded-xl px-4 py-3 flex items-center gap-3 font-bold shadow-sm ${sending ? "bg-[color:#dc2626] text-white" : "bg-[color:#e8f5ec] text-[color:#166534]"}`}>
+        <span className={`inline-block w-3 h-3 rounded-full ${sending ? "bg-white animate-pulse" : "bg-[color:#16a34a]"}`} />
+        <span className="uppercase tracking-wide text-sm">{sending ? "🔴 LIVE · " : "🟢 "}{liveText}</span>
+        {sending && <span className="ml-auto text-xs font-medium normal-case opacity-90">Pause before making changes to a running batch</span>}
+      </div>
+
       {/* Lead-set tabs */}
       <div className="card p-3">
         <div className="flex items-center gap-2 flex-wrap">
