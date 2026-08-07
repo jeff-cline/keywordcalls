@@ -31,8 +31,9 @@ export async function POST(req: NextRequest) {
   const camps = await db.outreachCampaign.findMany({ where: { OR: [{ rolloutGroup: { not: "" } }] } });
   let totalSent = 0; const perCampaign: { campaign: string; sent: number; note?: string }[] = [];
 
+  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000); // don't re-drop a call that may still be in progress
   for (const c of camps) {
-    const pending = await db.campaignCallback.findMany({ where: { campaignId: c.id, outcome: { in: ["after_hours", "no_answer", "no_route"] }, redropped: false } });
+    const pending = await db.campaignCallback.findMany({ where: { campaignId: c.id, connectSec: 0, redropped: false, at: { lt: fiveMinAgo } } });
     if (pending.length === 0) continue;
     if (!c.afterHoursAudioUrl) { perCampaign.push({ campaign: c.name, sent: 0, note: "no after-hours recording" }); continue; }
     if (!c.campaignNumber) { perCampaign.push({ campaign: c.name, sent: 0, note: "no callback number" }); continue; }

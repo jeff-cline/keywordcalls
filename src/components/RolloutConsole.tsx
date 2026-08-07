@@ -11,7 +11,7 @@ type Data = {
   tests: { id: string; name: string; rolloutGroup: string }[]; cap: { maxPerHour: number };
 };
 type AhRow = { phone: string; name: string; email: string; city: string; state: string; outcome: string; redropped: boolean; redroppedAt: string | null; at: string };
-type AhData = { ok: boolean; afterhours: true; template: { id: string; name: string; hasAfterHoursAudio: boolean } | null; summary: { missed: number; pending: number; recovered: number }; rows: AhRow[] };
+type AhData = { ok: boolean; afterhours: true; template: { id: string; name: string; hasAfterHoursAudio: boolean; afterHoursAudioUrl: string } | null; summary: { missed: number; pending: number; recovered: number }; rows: AhRow[] };
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const mask = (n: string) => (n && n.length >= 4 ? `${n.slice(0, -4)}••${n.slice(-2)}` : n || "unknown");
 const HOUR = 3600e3, DAY = 24 * HOUR;
@@ -191,7 +191,12 @@ export default function RolloutConsole() {
             <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)] mb-2">“We missed you” recovery voicemail</div>
             <p className="text-sm text-[color:var(--muted)] mb-3">Played live when the call center doesn&apos;t pick up, and re-dropped automatically at <b>10:00 AM ET</b> (9:00 AM your time) the next morning to everyone we couldn&apos;t connect — asking them to call back during business hours.</p>
             {ah?.template
-              ? <>{ah.template.hasAfterHoursAudio && <div className="text-sm text-[color:#16a34a] mb-2">✓ Recorded — re-record any time below.</div>}
+              ? <>{ah.template.hasAfterHoursAudio && (
+                    <div className="mb-3 rounded-lg bg-[color:var(--soft)] p-3">
+                      <div className="text-sm text-[color:#16a34a] mb-2">✓ Recorded — this is exactly what gets played &amp; re-dropped. Press play to hear it:</div>
+                      <audio controls preload="none" src={ah.template.afterHoursAudioUrl} className="w-full h-9" />
+                    </div>
+                  )}
                   <RecordButton campaignId={ah.template.id} type="afterhours" existingUrl="" label="Record your after-hours / call-back voicemail" /></>
               : <div className="text-sm text-[color:var(--muted)]">No campaign yet.</div>}
             <div className="mt-3 flex items-center gap-2">

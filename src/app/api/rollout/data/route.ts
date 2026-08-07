@@ -21,16 +21,19 @@ export async function GET(req: NextRequest) {
   // the center didn't answer), plus whether the 10am recovery re-drop has gone out.
   if (afterhours) {
     const template = (await db.outreachCampaign.findFirst({ where: { rolloutGroup: "A" } })) || (await db.outreachCampaign.findFirst({ orderBy: { createdAt: "asc" } }));
-    const [missed, pending, recovered] = await Promise.all([
-      db.campaignCallback.findMany({ where: { outcome: { in: ["after_hours", "no_answer", "no_route"] } }, orderBy: { at: "desc" }, take: 500 }),
-      db.campaignCallback.count({ where: { outcome: { in: ["after_hours", "no_answer", "no_route"] }, redropped: false } }),
+    // "Missed" = the buyer was never reached (connectSec 0), regardless of how it ended. This catches
+    // every non-connected callback — after-hours, no-answer, no-route, or ones Twilio never resolved.
+    const [rows, missed, pending, recovered] = await Promise.all([
+      db.campaignCallback.findMany({ where: { connectSec: 0 }, orderBy: { at: "desc" }, take: 500 }),
+      db.campaignCallback.count({ where: { connectSec: 0 } }),
+      db.campaignCallback.count({ where: { connectSec: 0, redropped: false } }),
       db.campaignCallback.count({ where: { redropped: true } }),
     ]);
     return NextResponse.json({
       ok: true, afterhours: true,
-      template: template ? { id: template.id, name: template.name, hasAfterHoursAudio: !!template.afterHoursAudioUrl } : null,
-      summary: { missed: missed.length, pending, recovered },
-      rows: missed.map((m) => ({ phone: m.phone, name: m.name, email: m.email, city: m.city, state: m.state, outcome: m.outcome, redropped: m.redropped, redroppedAt: m.redroppedAt, at: m.at })),
+      template: template ? { id: template.id, name: template.name, hasAfterHoursAudio: !!template.afterHoursAudioUrl, afterHoursAudioUrl: template.afterHoursAudioUrl } : null,
+      summary: { missed, pending, recovered },
+      rows: rows.map((m) => ({ phone: m.phone, name: m.name, email: m.email, city: m.city, state: m.state, outcome: m.outcome, redropped: m.redropped, redroppedAt: m.redroppedAt, at: m.at })),
     });
   }
 
