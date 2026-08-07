@@ -79,8 +79,8 @@ export async function GET(req: NextRequest) {
   const sendingNow = withinWindow && processing && inQueue > 0 && !(one && "paused" in one && one.paused);
   const nextOpenAt = !combined && one ? nextWindowOpen(one) : null; // ms epoch of the next send-window open
   const campaign = combined
-    ? { id: "", name: "All Combined", hasAudio: false, campaignNumber: "", routingNumber: "combined", listCount: totalList, sentTotal: sent, remaining: Math.max(0, totalList - sent), combined: true, paused: false }
-    : { id: one.id, name: one.name, hasAudio: !!one.outboundAudioUrl, campaignNumber: one.campaignNumber, routingNumber: one.routingNumber, listCount: totalList, sentTotal: sent, remaining: Math.max(0, totalList - sent), combined: false, paused: one.paused };
+    ? { id: "", name: "All Combined", hasAudio: false, outboundAudioUrl: "", campaignNumber: "", routingNumber: "combined", listCount: totalList, sentTotal: sent, remaining: Math.max(0, totalList - sent), combined: true, paused: false }
+    : { id: one.id, name: one.name, hasAudio: !!one.outboundAudioUrl, outboundAudioUrl: one.outboundAudioUrl, campaignNumber: one.campaignNumber, routingNumber: one.routingNumber, listCount: totalList, sentTotal: sent, remaining: Math.max(0, totalList - sent), combined: false, paused: one.paused };
 
   return NextResponse.json({
     ok: true, campaign, tests, cap: { maxPerHour: CAP_PER_HOUR },

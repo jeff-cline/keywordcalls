@@ -6,7 +6,7 @@ type CB = { phone: string; name: string; email: string; city: string; state: str
 type Target = { phone: string; name: string; email: string; city: string; state: string; calledBack: boolean; calledBackAt: string | null; landedAt: string; connectSec: number; billable: boolean; sentAt: string };
 type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string; status: string; delivered: number; hopper: number };
 type Data = {
-  campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; routingNumber: string; listCount: number; sentTotal: number; remaining: number; combined?: boolean; paused?: boolean } | null;
+  campaign: { id: string; name: string; hasAudio: boolean; outboundAudioUrl?: string; campaignNumber: string; routingNumber: string; listCount: number; sentTotal: number; remaining: number; combined?: boolean; paused?: boolean } | null;
   delivered: number; filtered: number; loaded: number; undelivered: number; inQueue: number; processing: boolean; sendingNow?: boolean; withinWindow?: boolean; nextOpenAt?: number | null; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
   tests: { id: string; name: string; rolloutGroup: string }[]; cap: { maxPerHour: number };
 };
@@ -247,9 +247,14 @@ export default function RolloutConsole() {
       {/* Record outbound voicemail — right here */}
       {d?.campaign && !isCombined && (
         <div className="card p-6">
-          <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)] mb-2">Outbound voicemail</div>
-          {d.campaign.hasAudio && <div className="text-sm text-[color:#16a34a] mb-2">✓ Recorded — re-record any time below.</div>}
-          <RecordButton campaignId={d.campaign.id} type="outbound" existingUrl="" label="Record your outbound voicemail" />
+          <div className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)] mb-2">Outbound voicemail — {d.campaign.name}</div>
+          {d.campaign.hasAudio
+            ? <div className="mb-3 rounded-lg bg-[color:var(--soft)] p-3">
+                <div className="text-sm text-[color:#16a34a] mb-2">✓ This is the exact voicemail that will drop for this campaign — press play to confirm before you launch:</div>
+                <audio controls preload="none" src={d.campaign.outboundAudioUrl} className="w-full h-9" />
+              </div>
+            : <div className="text-sm text-amber-700 mb-2">⚠️ No outbound voicemail recorded yet — record one below before launching.</div>}
+          <RecordButton campaignId={d.campaign.id} type="outbound" existingUrl={d.campaign.outboundAudioUrl || ""} label="Record / re-record your outbound voicemail" />
         </div>
       )}
 
