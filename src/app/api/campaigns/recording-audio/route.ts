@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
   const cbId = u.searchParams.get("cb") || "";
   const phone = u.searchParams.get("phone") || "";
   const tcId = u.searchParams.get("tc") || "";
+  const download = u.searchParams.get("download") === "1";
 
   let recUrl = "";
   if (tcId) recUrl = (await db.testCall.findUnique({ where: { id: tcId } }))?.recordingUrl || "";
@@ -27,5 +28,7 @@ export async function GET(req: NextRequest) {
   const auth = "Basic " + Buffer.from(`${cfg.sid}:${cfg.token}`).toString("base64");
   const tw = await fetch(`${recUrl}.mp3`, { headers: { Authorization: auth } }).catch(() => null);
   if (!tw || !tw.ok || !tw.body) return NextResponse.json({ error: "Recording not ready." }, { status: 404 });
-  return new Response(tw.body, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=3600" } });
+  const headers: Record<string, string> = { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=3600" };
+  if (download) { const fname = (phone.replace(/\D/g, "") || cbId || tcId || "recording") + ".mp3"; headers["Content-Disposition"] = `attachment; filename="${fname}"`; } // save-as the phone number
+  return new Response(tw.body, { headers });
 }
