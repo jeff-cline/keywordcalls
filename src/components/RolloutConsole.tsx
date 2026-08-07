@@ -7,7 +7,7 @@ type Target = { phone: string; name: string; email: string; city: string; state:
 type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string; status: string; delivered: number; hopper: number };
 type Data = {
   campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; routingNumber: string; listCount: number; sentTotal: number; remaining: number; combined?: boolean; paused?: boolean } | null;
-  delivered: number; filtered: number; loaded: number; undelivered: number; inQueue: number; processing: boolean; sendingNow?: boolean; withinWindow?: boolean; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
+  delivered: number; filtered: number; loaded: number; undelivered: number; inQueue: number; processing: boolean; sendingNow?: boolean; withinWindow?: boolean; nextOpenAt?: number | null; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
   tests: { id: string; name: string; rolloutGroup: string }[]; cap: { maxPerHour: number };
 };
 type AhRow = { phone: string; name: string; email: string; city: string; state: string; outcome: string; redropped: boolean; redroppedAt: string | null; at: string };
@@ -35,6 +35,8 @@ export default function RolloutConsole() {
   const [ah, setAh] = useState<AhData | null>(null);      // After Hours Callback view data
   const [redropBusy, setRedropBusy] = useState(false);
   const recAudio = useRef<HTMLAudioElement | null>(null); // one shared player for the tiny row ▶ buttons
+  const [nowMs, setNowMs] = useState(0);                  // ticks every second for the live countdown
+  useEffect(() => { setNowMs(Date.now()); const id = setInterval(() => setNowMs(Date.now()), 1000); return () => clearInterval(id); }, []);
 
   // Play the exact recovery voicemail (same clip every row) — no per-row <audio>, so rows stay tiny.
   function playRecovery() {
@@ -155,11 +157,14 @@ export default function RolloutConsole() {
   const activeId = isCombined ? "combined" : d?.campaign?.id || "";
 
   const sending = !!d?.sendingNow;
+  const msToOpen = d?.nextOpenAt && nowMs ? d.nextOpenAt - nowMs : null;
+  const fmtLeft = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60; return h > 0 ? `${h}h ${m}m ${sec}s` : m > 0 ? `${m}m ${sec}s` : `${sec}s`; };
+  const countdown = !sending && msToOpen && msToOpen > 0 ? ` · ⏱ sending starts in ${fmtLeft(msToOpen)}` : "";
   const liveText = sending
     ? `SENDING NOW${d?.inQueue ? ` — ${d.inQueue.toLocaleString()} in the queue` : ""}`
     : d?.campaign?.paused ? "PAUSED — safe to make changes"
-    : d?.withinWindow === false ? "Outside sending hours — safe to make changes"
-    : "Idle — nothing sending right now — safe to make changes";
+    : d?.withinWindow === false ? `Outside sending hours — safe to make changes${countdown}`
+    : "Idle — window open, nothing in the queue — safe to make changes";
 
   return (
     <div className="space-y-6">
