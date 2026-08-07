@@ -4,7 +4,7 @@ import RecordButton from "@/components/RecordButton";
 
 type CB = { phone: string; name: string; email: string; city: string; state: string; landedAt: string; connectSec: number; billable: boolean; at: string };
 type Target = { phone: string; name: string; email: string; city: string; state: string; calledBack: boolean; calledBackAt: string | null; landedAt: string; connectSec: number; billable: boolean; sentAt: string };
-type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string };
+type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string; status: string; delivered: number; hopper: number };
 type Data = {
   campaign: { id: string; name: string; hasAudio: boolean; campaignNumber: string; routingNumber: string; listCount: number; sentTotal: number; remaining: number; combined?: boolean; paused?: boolean } | null;
   delivered: number; filtered: number; loaded: number; undelivered: number; inQueue: number; processing: boolean; billableCount: number; calledBackCount: number; sentCount: number; batches: Batch[]; callbacks: CB[]; targets: Target[];
@@ -278,6 +278,31 @@ export default function RolloutConsole() {
           : <><span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" /> All batches complete — <b>{delivered.toLocaleString()} delivered</b>, queue empty. Now watching for callbacks.</>}
       </div>
 
+      {/* Batches — per-batch status at a glance */}
+      {(d?.batches?.length || 0) > 0 && (
+        <div className="card p-0 overflow-hidden">
+          <div className="p-4 text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Batches</div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Batch</th><th className="py-2 px-4">Status</th><th className="py-2 px-4">Sent</th><th className="py-2 px-4">Delivered</th><th className="py-2 px-4">In queue</th><th className="py-2 px-4">Throttle</th><th className="py-2 px-4">Launched</th></tr></thead>
+              <tbody>
+                {(d?.batches || []).slice().reverse().map((b) => (
+                  <tr key={b.id} className="border-b border-[color:var(--line)] last:border-0">
+                    <td className="py-2 px-4 font-medium">{b.label}</td>
+                    <td className="py-2 px-4"><BatchPill status={b.status} hopper={b.hopper} /></td>
+                    <td className="py-2 px-4">{b.size.toLocaleString()}</td>
+                    <td className="py-2 px-4 text-[color:#16a34a] font-semibold">{b.delivered.toLocaleString()}</td>
+                    <td className="py-2 px-4">{b.hopper.toLocaleString()}</td>
+                    <td className="py-2 px-4 text-[color:var(--muted)]">{b.throttle.toLocaleString()}/hr</td>
+                    <td className="py-2 px-4 text-[color:var(--muted)] whitespace-nowrap">{new Date(b.launchedAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Headline stats */}
       <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Sent" value={sent.toLocaleString()} />
@@ -478,6 +503,18 @@ export default function RolloutConsole() {
       )}
     </div>
   );
+}
+
+// Per-batch status pill from the live JDI status. A stopped-with-empty-hopper batch reads "Complete".
+function BatchPill({ status, hopper }: { status: string; hopper: number }) {
+  const s = (status || "").toUpperCase();
+  let label = s || "—", cls = "bg-gray-100 text-gray-700";
+  if (s === "ACTIVE") { label = hopper > 0 ? "🟢 Active" : "🟢 Active (draining)"; cls = "bg-green-100 text-green-800"; }
+  else if (s === "PAUSED") { label = "⏸️ Paused"; cls = "bg-amber-100 text-amber-800"; }
+  else if (s === "COMPLETED") { label = "✓ Complete"; cls = "bg-blue-100 text-blue-800"; }
+  else if (s === "STOPPED") { label = "■ Stopped"; cls = "bg-gray-200 text-gray-700"; }
+  else if (s === "SCHEDULED" || s === "PENDING") { label = "🕒 Scheduled"; cls = "bg-indigo-100 text-indigo-800"; }
+  return <span className={`rounded-full text-xs font-semibold px-2 py-0.5 ${cls}`}>{label}</span>;
 }
 
 function Stat({ label, value, sub, color = "#0f1115" }: { label: string; value: string; sub?: string; color?: string }) {

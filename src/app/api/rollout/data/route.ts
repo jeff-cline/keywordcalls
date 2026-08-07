@@ -58,9 +58,10 @@ export async function GET(req: NextRequest) {
 
   const targets = [...green, ...recent].map((t) => ({ phone: t.phone, name: t.name, email: t.email, city: t.city, state: t.state, calledBack: t.calledBack, calledBackAt: t.calledBackAt, landedAt: t.landedAt, connectSec: t.connectSec, billable: t.billable, sentAt: t.at }));
 
-  // Live delivery funnel across all batches (best-effort, from JDI).
+  // Live delivery funnel across all batches (best-effort, from JDI). Also capture per-batch status.
   let delivered = 0, filtered = 0, loaded = 0, undelivered = 0, inQueue = 0, processing = false;
-  for (const b of batches) { if (b.jdiCampaignId) { const ov = await jdiOverview(b.jdiCampaignId); if (ov) { delivered += Number(ov.delivered || 0); filtered += Number(ov.filtered || 0); loaded += Number(ov.numbersLoaded || 0); undelivered += Number(ov.undelivered || 0); inQueue += Number(ov.hopperCount || 0); if (String(ov.status || "").toUpperCase() === "ACTIVE") processing = true; } } }
+  const batchInfo: Record<string, { status: string; delivered: number; hopper: number }> = {};
+  for (const b of batches) { if (b.jdiCampaignId) { const ov = await jdiOverview(b.jdiCampaignId); if (ov) { delivered += Number(ov.delivered || 0); filtered += Number(ov.filtered || 0); loaded += Number(ov.numbersLoaded || 0); undelivered += Number(ov.undelivered || 0); inQueue += Number(ov.hopperCount || 0); const st = String(ov.status || "").toUpperCase(); if (st === "ACTIVE") processing = true; batchInfo[b.id] = { status: st, delivered: Number(ov.delivered || 0), hopper: Number(ov.hopperCount || 0) }; } } }
 
   // Persist the live JDI delivered/filtered back to the campaign so /admin economics (cost per
   // delivered drop) reflect reality without polling JDI on every admin refresh.
@@ -75,7 +76,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true, campaign, tests, cap: { maxPerHour: CAP_PER_HOUR },
     delivered, filtered, loaded, undelivered, inQueue, processing, sentCount, calledBackCount, billableCount,
-    batches: batches.map((b) => ({ id: b.id, label: b.label, size: b.size, throttle: b.throttle, launchedAt: b.launchedAt })),
+    batches: batches.map((b) => ({ id: b.id, label: b.label, size: b.size, throttle: b.throttle, launchedAt: b.launchedAt, status: batchInfo[b.id]?.status || "", delivered: batchInfo[b.id]?.delivered || 0, hopper: batchInfo[b.id]?.hopper || 0 })),
     targets,
     callbacks: callbacks.map((cb) => ({ phone: cb.phone, name: cb.name, email: cb.email, city: cb.city, state: cb.state, landedAt: cb.landedAt, connectSec: cb.connectSec, billable: cb.billable, at: cb.at })),
   });
