@@ -14,9 +14,11 @@ export async function GET(req: NextRequest) {
   const u = new URL(req.url);
   const cbId = u.searchParams.get("cb") || "";
   const phone = u.searchParams.get("phone") || "";
+  const tcId = u.searchParams.get("tc") || "";
 
   let recUrl = "";
-  if (cbId) recUrl = (await db.campaignCallback.findUnique({ where: { id: cbId } }))?.recordingUrl || "";
+  if (tcId) recUrl = (await db.testCall.findUnique({ where: { id: tcId } }))?.recordingUrl || "";
+  else if (cbId) recUrl = (await db.campaignCallback.findUnique({ where: { id: cbId } }))?.recordingUrl || "";
   else if (phone) { const dg = phone.replace(/\D/g, "").slice(-10); if (dg) recUrl = (await db.rolloutTarget.findFirst({ where: { phone: { contains: dg }, recordingUrl: { not: "" } }, orderBy: { at: "desc" } }))?.recordingUrl || ""; }
   if (!recUrl) return NextResponse.json({ error: "No recording yet." }, { status: 404 });
 

@@ -18,7 +18,7 @@ export default function BuyerTestCall({ campaignId, routingNumber }: { campaignI
     if (!routingNumber) { setMsg("Set a buyer routing number first."); return; }
     try {
       setPhase("prep"); setMsg("Buying a fresh number (unique caller ID)…");
-      const nr = await fetch("/api/rollout/test-number", { method: "POST" }).then((r) => r.json());
+      const nr = await fetch("/api/rollout/test-number", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ campaignId }) }).then((r) => r.json());
       if (!nr.ok) { setPhase("idle"); setMsg(nr.error || "Could not buy a number."); return; }
       setNum(nr.number);
       setMsg("Starting the call…");

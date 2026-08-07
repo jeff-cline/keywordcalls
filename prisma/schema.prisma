@@ -217,6 +217,19 @@ model PhoneNumber {
 }
 
 // Every number a rollout batch was sent to — appended up front, flips "green" (calledBack) on callback.
+// A saved buyer-test call placed from the /rollout console (fresh number → buyer), with its recording.
+model TestCall {
+  id           String   @id @default(cuid())
+  fromNumber   String   @default("") // the fresh Twilio number we dialed from
+  toNumber     String   @default("") // the buyer routing number
+  campaignId   String   @default("")
+  campaignName String   @default("")
+  recordingUrl String   @default("")
+  at           DateTime @default(now())
+  @@index([at])
+  @@map("test_call")
+}
+
 model RolloutTarget {
   id           String    @id @default(cuid())
   campaignId   String

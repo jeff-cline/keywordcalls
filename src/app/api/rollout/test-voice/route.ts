@@ -24,7 +24,8 @@ export async function POST(req: NextRequest) {
   if (!dest || dest.length < 11) return xml(`<Say voice="Polly.Joanna-Neural">No buyer routing number is set.</Say><Hangup/>`);
   const callerId = callerRaw.length === 10 ? `+1${callerRaw}` : callerRaw.length === 11 ? `+${callerRaw}` : "";
   const callerAttr = callerId ? ` callerId="${callerId}"` : "";
-  return xml(`<Dial${callerAttr} answerOnBridge="true" timeout="30" action="https://keywordcalls.com/api/rollout/test-voice?done=1"><Number>${esc(dest)}</Number></Dial>`);
+  const recCb = `https://keywordcalls.com/api/rollout/test-recording?from=${encodeURIComponent(callerId)}`;
+  return xml(`<Dial${callerAttr} answerOnBridge="true" timeout="30" action="https://keywordcalls.com/api/rollout/test-voice?done=1" record="record-from-ringing-dual" recordingStatusCallback="${recCb}" recordingStatusCallbackEvent="completed"><Number>${esc(dest)}</Number></Dial>`);
 }
 
 // After the dial ends, if the buyer never answered, tell the tester through their speakers.

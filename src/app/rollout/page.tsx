@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession, isGod } from "@/lib/auth";
 import LogoutButton from "@/components/LogoutButton";
+import NavBalances from "@/components/NavBalances";
 import RolloutConsole from "@/components/RolloutConsole";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export default async function RolloutPage() {
       <header className="bg-white border-b border-[color:var(--line)]">
         <div className="mx-auto max-w-6xl px-5 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3"><img src="/logo.png" alt="KeywordCalls" className="h-8 w-auto" /><span className="rounded-full bg-[color:#ff7a1a] text-white text-[11px] font-bold px-2 py-0.5 uppercase">Rollout · God only</span></div>
-          <div className="flex items-center gap-3 text-sm"><a href="/admin" className="btn btn-ghost text-sm">← Admin</a><LogoutButton /></div>
+          <div className="flex items-center gap-3 text-sm"><NavBalances /><a href="/admin" className="btn btn-ghost text-sm">← Admin</a><LogoutButton /></div>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-5 py-8">
