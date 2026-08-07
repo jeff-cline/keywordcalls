@@ -466,9 +466,9 @@ export default function RolloutConsole() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Status</th><th className="py-2 px-4">Name</th><th className="py-2 px-4">Phone</th><th className="py-2 px-4">Location</th><th className="py-2 px-4">Landed at</th><th className="py-2 px-4">Talk time</th><th className="py-2 px-4">Response</th><th className="py-2 px-4">When</th></tr></thead>
+            <thead><tr className="text-left text-xs uppercase text-[color:var(--muted)] border-b border-[color:var(--line)] bg-[color:var(--soft)]"><th className="py-2 px-4">Status</th><th className="py-2 px-4">Name</th><th className="py-2 px-4">Phone</th><th className="py-2 px-4">Location</th><th className="py-2 px-4">Landed at</th><th className="py-2 px-4">Talk time</th><th className="py-2 px-4">Ended by</th><th className="py-2 px-4">Response</th><th className="py-2 px-4">When</th></tr></thead>
             <tbody>
-              {(!d?.targets || d.targets.length === 0) && <tr><td colSpan={8} className="py-6 px-4 text-[color:var(--muted)]">Numbers appear here as batches send. They turn green when they call back.</td></tr>}
+              {(!d?.targets || d.targets.length === 0) && <tr><td colSpan={9} className="py-6 px-4 text-[color:var(--muted)]">Numbers appear here as batches send. They turn green when they call back.</td></tr>}
               {(() => {
                 const all = d?.targets || [];
                 const green = all.filter((t) => t.calledBack);
@@ -484,7 +484,8 @@ export default function RolloutConsole() {
                       <td className="py-2 px-4">{mask(t.phone)}</td>
                       <td className="py-2 px-4 text-[color:var(--muted)]">{[t.city, t.state].filter(Boolean).join(", ") || "—"}</td>
                       <td className="py-2 px-4">{t.landedAt ? t.landedAt : t.calledBack ? <span className="text-amber-700 text-xs">no route set</span> : <span className="text-[color:var(--muted)]">—</span>}</td>
-                      <td className="py-2 px-4"><div className="flex items-center gap-1.5">{t.connectSec ? <span className={t.connectSec >= 120 ? "text-[color:#16a34a] font-bold" : "text-[color:var(--ink)]"}>{mmss(t.connectSec)}</span> : <span className="text-[color:var(--muted)]">—</span>}{t.recordingUrl && <button onClick={(e) => { e.stopPropagation(); playRecordingUrl(`/api/campaigns/recording-audio?phone=${encodeURIComponent(t.phone)}`); }} title="Hear this call (transfer + conversation)" className="text-[color:var(--brand2)] hover:opacity-70 text-[11px] leading-none">▶</button>}</div>{t.endedBy && <div className="leading-none mt-0.5">{endedByBadge(t.endedBy)}</div>}</td>
+                      <td className="py-2 px-4"><div className="flex items-center gap-1.5">{t.connectSec ? <span className={t.connectSec >= 120 ? "text-[color:#16a34a] font-bold" : "text-[color:var(--ink)]"}>{mmss(t.connectSec)}</span> : <span className="text-[color:var(--muted)]">—</span>}{t.recordingUrl && <button onClick={(e) => { e.stopPropagation(); playRecordingUrl(`/api/campaigns/recording-audio?phone=${encodeURIComponent(t.phone)}`); }} title="Hear this call (transfer + conversation)" className="text-[color:var(--brand2)] hover:opacity-70 text-[11px] leading-none">▶</button>}</div></td>
+                      <td className="py-2 px-4 whitespace-nowrap">{t.endedBy ? endedByBadge(t.endedBy) : <span className="text-[color:var(--muted)]">—</span>}</td>
                       <td className="py-2 px-4 text-[color:var(--muted)]">{wait >= 0 ? fmtWait(wait) : "—"}</td>
                       <td className="py-2 px-4 text-[color:var(--muted)] whitespace-nowrap">{t.calledBackAt ? new Date(t.calledBackAt).toLocaleTimeString() : "—"}</td>
                     </tr>
@@ -494,14 +495,14 @@ export default function RolloutConsole() {
                   <>
                     {greenCapped.map((t, i) => row(t, i, `g${i}`))}
                     {green.length > 100 && (
-                      <tr><td colSpan={8} className="py-2 px-4 text-xs text-[color:var(--muted)] bg-[#16a34a]/5">Showing the first 100 of {green.length.toLocaleString()} callbacks.</td></tr>
+                      <tr><td colSpan={9} className="py-2 px-4 text-xs text-[color:var(--muted)] bg-[#16a34a]/5">Showing the first 100 of {green.length.toLocaleString()} callbacks.</td></tr>
                     )}
                     {sentShown.map((t, i) => row(t, i, `s${i}`))}
                     {!showAllSent && notYet.length > 10 && (
-                      <tr><td colSpan={8} className="py-2 px-4 text-center"><button className="text-sm font-semibold text-[color:var(--brand2)] hover:underline" onClick={() => setShowAllSent(true)}>Show more ({(notYet.length - 10).toLocaleString()} more sent)</button></td></tr>
+                      <tr><td colSpan={9} className="py-2 px-4 text-center"><button className="text-sm font-semibold text-[color:var(--brand2)] hover:underline" onClick={() => setShowAllSent(true)}>Show more ({(notYet.length - 10).toLocaleString()} more sent)</button></td></tr>
                     )}
                     {showAllSent && notYet.length > 10 && (
-                      <tr><td colSpan={8} className="py-2 px-4 text-center"><button className="text-sm font-semibold text-[color:var(--muted)] hover:underline" onClick={() => setShowAllSent(false)}>Show less</button></td></tr>
+                      <tr><td colSpan={9} className="py-2 px-4 text-center"><button className="text-sm font-semibold text-[color:var(--muted)] hover:underline" onClick={() => setShowAllSent(false)}>Show less</button></td></tr>
                     )}
                   </>
                 );
