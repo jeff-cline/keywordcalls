@@ -4,7 +4,7 @@ import RecordButton from "@/components/RecordButton";
 import BuyerTestCall from "@/components/BuyerTestCall";
 
 type CB = { phone: string; name: string; email: string; city: string; state: string; landedAt: string; connectSec: number; billable: boolean; at: string };
-type Target = { phone: string; name: string; email: string; city: string; state: string; calledBack: boolean; calledBackAt: string | null; landedAt: string; connectSec: number; billable: boolean; recordingUrl?: string; sentAt: string };
+type Target = { phone: string; name: string; email: string; city: string; state: string; calledBack: boolean; calledBackAt: string | null; landedAt: string; connectSec: number; billable: boolean; endedBy?: string; recordingUrl?: string; sentAt: string };
 type Batch = { id: string; label: string; size: number; throttle: number; launchedAt: string; status: string; delivered: number; hopper: number };
 type Data = {
   campaign: { id: string; name: string; hasAudio: boolean; outboundAudioUrl?: string; campaignNumber: string; routingNumber: string; listCount: number; sentTotal: number; remaining: number; combined?: boolean; paused?: boolean } | null;
@@ -14,6 +14,13 @@ type Data = {
 type AhRow = { phone: string; name: string; email: string; city: string; state: string; outcome: string; redropped: boolean; redroppedAt: string | null; at: string };
 type AhData = { ok: boolean; afterhours: true; template: { id: string; name: string; hasAfterHoursAudio: boolean; afterHoursAudioUrl: string } | null; summary: { missed: number; pending: number; recovered: number }; rows: AhRow[] };
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+// Who ended the transfer — caller hanging up early is the signal worth watching.
+function endedByBadge(e?: string) {
+  if (e === "caller") return <span className="text-[11px] font-semibold text-[color:#dc2626]" title="The consumer hung up first">↩ caller hung up</span>;
+  if (e === "buyer") return <span className="text-[11px] font-semibold text-[color:#2f6bff]" title="The buyer hung up first">↩ buyer hung up</span>;
+  if (e === "no_answer") return <span className="text-[11px] font-semibold text-[color:var(--muted)]" title="The buyer never answered">no answer</span>;
+  return null;
+}
 const mask = (n: string) => (n && n.length >= 4 ? `${n.slice(0, -4)}••${n.slice(-2)}` : n || "unknown");
 const HOUR = 3600e3, DAY = 24 * HOUR;
 
@@ -477,7 +484,7 @@ export default function RolloutConsole() {
                       <td className="py-2 px-4">{mask(t.phone)}</td>
                       <td className="py-2 px-4 text-[color:var(--muted)]">{[t.city, t.state].filter(Boolean).join(", ") || "—"}</td>
                       <td className="py-2 px-4">{t.landedAt ? t.landedAt : t.calledBack ? <span className="text-amber-700 text-xs">no route set</span> : <span className="text-[color:var(--muted)]">—</span>}</td>
-                      <td className="py-2 px-4"><span className="inline-flex items-center gap-1.5">{t.connectSec ? <span className={t.connectSec >= 120 ? "text-[color:#16a34a] font-bold" : "text-[color:var(--ink)]"}>{mmss(t.connectSec)}</span> : <span className="text-[color:var(--muted)]">—</span>}{t.recordingUrl && <button onClick={(e) => { e.stopPropagation(); playRecordingUrl(`/api/campaigns/recording-audio?phone=${encodeURIComponent(t.phone)}`); }} title="Hear this call (transfer + conversation)" className="text-[color:var(--brand2)] hover:opacity-70 text-[11px] leading-none">▶</button>}</span></td>
+                      <td className="py-2 px-4"><div className="flex items-center gap-1.5">{t.connectSec ? <span className={t.connectSec >= 120 ? "text-[color:#16a34a] font-bold" : "text-[color:var(--ink)]"}>{mmss(t.connectSec)}</span> : <span className="text-[color:var(--muted)]">—</span>}{t.recordingUrl && <button onClick={(e) => { e.stopPropagation(); playRecordingUrl(`/api/campaigns/recording-audio?phone=${encodeURIComponent(t.phone)}`); }} title="Hear this call (transfer + conversation)" className="text-[color:var(--brand2)] hover:opacity-70 text-[11px] leading-none">▶</button>}</div>{t.endedBy && <div className="leading-none mt-0.5">{endedByBadge(t.endedBy)}</div>}</td>
                       <td className="py-2 px-4 text-[color:var(--muted)]">{wait >= 0 ? fmtWait(wait) : "—"}</td>
                       <td className="py-2 px-4 text-[color:var(--muted)] whitespace-nowrap">{t.calledBackAt ? new Date(t.calledBackAt).toLocaleTimeString() : "—"}</td>
                     </tr>
@@ -544,6 +551,7 @@ export default function RolloutConsole() {
               <div><b>Response time:</b> {sel.calledBackAt ? fmtWait(new Date(sel.calledBackAt).getTime() - new Date(sel.sentAt).getTime()) : "—"}</div>
               <div><b>Landed at (routed to):</b> {sel.landedAt || <span className="text-amber-700">no routing number was set</span>}</div>
               <div><b>Talk time:</b> {sel.connectSec ? <span className={sel.connectSec >= 120 ? "text-[color:#16a34a] font-bold" : ""}>{mmss(sel.connectSec)}{sel.billable ? " · billable (120s+)" : ""}</span> : "—"}</div>
+              <div><b>Ended by:</b> {sel.endedBy ? endedByBadge(sel.endedBy) : <span className="text-[color:var(--muted)]">—</span>}</div>
               <div className="pt-2 border-t border-[color:var(--line)] mt-2"><b>Call recording:</b> {sel.recordingUrl ? <audio controls preload="none" src={`/api/campaigns/recording-audio?phone=${encodeURIComponent(sel.phone)}`} className="w-full h-9 mt-1" /> : <span className="text-[color:var(--muted)]"> not ready yet (appears a few seconds after the call)</span>}</div>
             </div>
           </div>
